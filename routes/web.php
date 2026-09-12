@@ -122,6 +122,9 @@ return static function (Router $router): void {
         $router->post('/ai/studio/keep', StudioController::class . '@keep', [
             RequirePermission::class . ':campaigns.create',
         ]);
+        $router->post('/campaigns/{id}/ai/review', StudioController::class . '@reviewCampaign', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':30,3600',
+        ]);
         $router->post('/segments/ai', StudioController::class . '@suggestSegment', [
             RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
         ]);

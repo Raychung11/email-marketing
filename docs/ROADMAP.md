@@ -60,9 +60,9 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | AI Campaign Studio (structured JSON campaign draft) | DONE |
 | Subject line / preview text generation              | DONE |
 | AI segment generator → validated `SegmentDefinition` | DONE |
-| AI campaign post-mortem analysis                    | TODO |
+| AI campaign post-mortem analysis                    | DONE |
 | AI assistant command interface (tool-restricted)    | TODO |
-| Recommendation panel                                | TODO |
+| Recommendation panel                                | DONE — measured recommendations; AI reviews stored alongside |
 
 ## Phase 4 — Automation
 

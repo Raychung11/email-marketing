@@ -12,6 +12,7 @@ use App\Core\Session;
 use App\Core\View;
 use App\Mail\TemplateRenderer;
 use App\Services\AiCampaignService;
+use App\Services\AiInsightService;
 use App\Services\AiSegmentService;
 use App\Services\TemplateService;
 
@@ -31,6 +32,7 @@ final class StudioController extends Controller
         Config $config,
         private readonly AiCampaignService $studio,
         private readonly AiSegmentService $aiSegments,
+        private readonly AiInsightService $insights,
         private readonly TemplateService $templates,
         private readonly TemplateRenderer $renderer,
     ) {
@@ -96,6 +98,14 @@ final class StudioController extends Controller
             '/campaigns/' . $campaignId,
             'Saved as a draft. Read it over, then send it for checking when you are happy.'
         );
+    }
+
+    /** POST /campaigns/{id}/ai/review — explain how a campaign went. */
+    public function reviewCampaign(Request $request): Response
+    {
+        $id = (int) $request->route('id');
+
+        return Response::json($this->insights->reviewCampaign($id));
     }
 
     /** POST /segments/ai — describe a group of people, get rules back. */

@@ -14,6 +14,7 @@ use App\Mail\EmailRenderer;
 use App\Repositories\ListRepository;
 use App\Repositories\SegmentRepository;
 use App\Repositories\TemplateRepository;
+use App\Services\AiInsightService;
 use App\Services\AnalyticsService;
 use App\Services\AuthManager;
 use App\Services\CampaignService;
@@ -32,6 +33,7 @@ final class CampaignController extends Controller
         private readonly EmailRenderer $renderer,
         private readonly AuthManager $auth,
         private readonly AnalyticsService $analytics,
+        private readonly AiInsightService $insights,
         private readonly TenantContext $tenant,
     ) {
         parent::__construct($view, $session, $config);
@@ -104,6 +106,8 @@ final class CampaignController extends Controller
             'delivery' => $delivery,
             // Only worth querying once something has actually been sent.
             'report'   => $delivery === null ? null : $this->analytics->campaignReport($id),
+            'review'   => $delivery === null ? null : $this->insights->storedReview($id),
+            'aiAvailable' => $this->insights->isAvailable(),
             'findings' => $campaign['validation_findings'],
             'statuses' => $this->statuses(),
             'types'    => $this->types(),

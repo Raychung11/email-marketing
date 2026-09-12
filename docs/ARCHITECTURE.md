@@ -417,6 +417,29 @@ quiet" means `last_engagement` before a date, and "big spenders" means
 rules it produces land in the ordinary builder where every condition is visible
 and editable, with a live count, before anything is saved.
 
+### The model may explain, it may not count
+
+Campaign reviews are the place where fabrication would do the most damage, so
+the rule is enforced rather than requested. Every figure comes from
+`AnalyticsService` and is handed to the model as fact. What comes back is prose,
+and before any of it is shown, **every number in that prose is checked against
+the figures we supplied**. A sentence containing a figure we cannot account for
+is dropped — not softened, dropped — and the user is told how many sentences went.
+
+The check allows the supplied numbers in the forms a model might write them
+(plain, comma-grouped, rounded to 0–2 decimal places), plus integers up to ten,
+because "three things to try" and "the first link" are structural rather than
+claims, and flagging those would drown the signal. Four-digit years pass too.
+
+If the headline itself does not survive, a measured one replaces it, so the user
+still gets a straight answer. Stored reviews are always labelled
+`ai_recommendation`, never `calculated` or `observed`: the figures underneath are
+measured, the sentence about them is not.
+
+The failure this prevents is not a clumsy sentence. It is a business owner
+repeating "that campaign brought in $4,200" to their accountant when nothing of
+the sort happened.
+
 ## 16. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak

@@ -354,6 +354,68 @@
     sync();
   }
 
+  /* ------------------------------------------------ AI campaign explanation */
+
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-review-go]');
+    if (!button) { return; }
+
+    var panel = document.getElementById('campaignReview');
+    if (!panel) { return; }
+
+    button.disabled = true;
+    button.textContent = 'Reading the numbers…';
+
+    var body = new FormData();
+    body.append('_token', token());
+
+    fetch(panel.getAttribute('data-review-url'), {
+      method: 'POST',
+      body: body,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data || !data.headline) {
+          panel.innerHTML = '<p class="small muted" style="margin:0">Nothing came back. ' +
+            'The numbers above are still correct.</p>';
+          return;
+        }
+
+        var html = '<p style="margin:0 0 8px"><strong>' + escapeHtml(data.headline) + '</strong></p>';
+
+        if (data.summary) {
+          html += '<p class="small">' + escapeHtml(data.summary) + '</p>';
+        }
+
+        if ((data.suggestions || []).length) {
+          html += '<p class="small" style="margin-bottom:4px"><strong>Worth trying next time:</strong></p><ul class="small">';
+          data.suggestions.forEach(function (suggestion) {
+            html += '<li>' + escapeHtml(suggestion) + '</li>';
+          });
+          html += '</ul>';
+        }
+
+        // When a sentence was thrown away for quoting a figure we cannot account
+        // for, say so. Quietly shortening the text would leave the impression the
+        // AI simply had less to say.
+        if ((data.dropped || []).length) {
+          html += '<p class="tiny" style="color:#b45309">We removed ' + data.dropped.length +
+            ' sentence(s) because they quoted figures we cannot account for. ' +
+            'Only the numbers on this page are measured.</p>';
+        }
+
+        html += '<p class="tiny muted" style="margin-bottom:0">' + escapeHtml(data.disclaimer || '') + '</p>';
+
+        panel.innerHTML = html;
+      })
+      .catch(function () {
+        button.disabled = false;
+        button.textContent = 'Explain this campaign';
+      });
+  });
+
   /* --------------------------------------------- AI smart-list description */
 
   /*

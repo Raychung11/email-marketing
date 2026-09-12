@@ -245,6 +245,37 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
         </div>
       </div>
 
+      <?php if ($aiAvailable): ?>
+        <div class="card">
+          <div class="card__head">
+            <h2>What this tells you</h2>
+            <?php if ($review !== null): ?>
+              <div class="card__actions"><span class="badge">Written by AI</span></div>
+            <?php endif; ?>
+          </div>
+          <div class="card__body">
+            <div id="campaignReview" data-review-url="/campaigns/<?= (int) $campaign['id'] ?>/ai/review">
+              <?php if ($review === null): ?>
+                <p class="small muted mt-0">
+                  Want it in plain English? We can read the numbers above and tell you what stands
+                  out and what to try next time.
+                </p>
+                <button class="btn" type="button" data-review-go>Explain this campaign</button>
+              <?php else: ?>
+                <p class="mt-0"><strong><?= e((string) $review['title']) ?></strong></p>
+                <p class="small" style="white-space:pre-line"><?= e((string) ($review['body'] ?? '')) ?></p>
+                <p class="tiny muted mb-0">
+                  Written by AI from the numbers above on
+                  <?= e(substr((string) $review['created_at'], 0, 10)) ?>. The figures are measured;
+                  the interpretation is a suggestion. Check anything you plan to repeat out loud.
+                </p>
+                <button class="btn btn--sm mt-1" type="button" data-review-go>Have another look</button>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <?php if ($report['links'] !== []): ?>
         <div class="card">
           <div class="card__head"><h2>What people pressed</h2></div>
