@@ -56,6 +56,24 @@ $choices = [
         </div>
       </div>
 
+      <?php if ($aiAvailable): ?>
+        <div class="card">
+          <div class="card__head"><h2>Describe it instead</h2></div>
+          <div class="card__body">
+            <p class="small muted mt-0">
+              Say who you are after in your own words and we will set the conditions up for you.
+              You can change anything afterwards.
+            </p>
+            <div class="field">
+              <input type="text" id="aiSegmentDescription" maxlength="1000"
+                     placeholder="e.g. customers in Perth who had a boiler fitted more than two years ago">
+            </div>
+            <button class="btn" type="button" id="aiSegmentGo">Set it up for me</button>
+            <div id="aiSegmentResult" class="small" hidden style="margin-top:10px"></div>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <div class="card">
         <div class="card__head"><h2>Conditions</h2></div>
         <div class="card__body">

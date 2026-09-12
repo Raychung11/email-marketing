@@ -59,7 +59,7 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | `ai_requests` token accounting                      | DONE |
 | AI Campaign Studio (structured JSON campaign draft) | DONE |
 | Subject line / preview text generation              | DONE |
-| AI segment generator → validated `SegmentDefinition` | TODO |
+| AI segment generator → validated `SegmentDefinition` | DONE |
 | AI campaign post-mortem analysis                    | TODO |
 | AI assistant command interface (tool-restricted)    | TODO |
 | Recommendation panel                                | TODO |

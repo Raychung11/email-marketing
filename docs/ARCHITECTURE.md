@@ -397,6 +397,26 @@ of the prompt is stored — enough to correlate and de-duplicate, not a permanen
 copy of everything a customer has typed about their business. Provider errors go
 to the log; the user gets a sentence they can act on.
 
+### Plain English into a smart list
+
+The same idea, and the safety was built two phases ago: the model does not get to
+describe a query, it gets to fill in a form. `SegmentCompiler` accepts only
+whitelisted field names, only operators valid for that field's type, and binds
+every value — so the worst a model can do is name a field that does not exist,
+which is rejected with the same error a hand-crafted browser payload gets.
+
+There is no string of SQL on this path, and no code that would start working if
+somebody added one. A rule naming `password_hash` is dropped and reported; a
+field of `city' OR 1=1 --` never resolves, so nothing is built at all; a *value*
+containing SQL is bound as a parameter and matches nobody rather than everybody.
+Tests assert each of those.
+
+What the model is genuinely good for is the translation — knowing that "gone
+quiet" means `last_engagement` before a date, and "big spenders" means
+`customer_value` above a number. It is a phrasebook, not a database client. The
+rules it produces land in the ordinary builder where every condition is visible
+and editable, with a live count, before anything is saved.
+
 ## 16. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak

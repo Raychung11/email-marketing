@@ -316,6 +316,28 @@
       matchSelect.addEventListener('change', sync);
     }
 
+    /*
+     * Replace every row with a definition from somewhere else — today that means
+     * the plain-English description box. The rules land in the ordinary builder
+     * rather than in a hidden field, so the user sees each condition and can
+     * change or delete any of them before saving.
+     */
+    root.loadDefinition = function (definition) {
+      if (!definition || !Array.isArray(definition.rules)) { return; }
+
+      rowsHost.innerHTML = '';
+
+      if (matchSelect && definition.match) { matchSelect.value = definition.match; }
+
+      definition.rules.forEach(function (rule) {
+        if (rule && !rule.rules) { addRow(rule); }
+      });
+
+      if (!rowsHost.children.length) { addRow(null); }
+
+      sync();
+    };
+
     if (initial && Array.isArray(initial.rules) && initial.rules.length) {
       if (matchSelect && initial.match) { matchSelect.value = initial.match; }
 
@@ -331,6 +353,78 @@
 
     sync();
   }
+
+  /* --------------------------------------------- AI smart-list description */
+
+  /*
+   * Sends a description, gets validated rules back, and loads them into the
+   * builder so the user can see and change every condition. The rules are shown
+   * in plain English with a live count before anything is saved — a list nobody
+   * checked is a list that emails the wrong people.
+   */
+  (function () {
+    var go = document.getElementById('aiSegmentGo');
+    if (!go) { return; }
+
+    var input  = document.getElementById('aiSegmentDescription');
+    var result = document.getElementById('aiSegmentResult');
+
+    go.addEventListener('click', function () {
+      var description = (input.value || '').trim();
+
+      if (!description) { input.focus(); return; }
+
+      go.disabled = true;
+      result.hidden = false;
+      result.innerHTML = '<span class="muted">Working it out…</span>';
+
+      var body = new FormData();
+      body.append('_token', token());
+      body.append('description', description);
+
+      fetch('/segments/ai', {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          go.disabled = false;
+
+          if (!data || !data.definition) {
+            var problem = (data && data.error && data.error.message) ||
+              (data && data.errors && data.errors.ai && data.errors.ai[0]) ||
+              'That did not work. Try describing it differently.';
+            result.innerHTML = '<span style="color:#b91c1c">' + escapeHtml(problem) + '</span>';
+            return;
+          }
+
+          var html = '<p style="margin:0 0 6px"><strong>' + escapeHtml(data.described) + '</strong></p>' +
+            '<p class="muted" style="margin:0 0 6px">' +
+            escapeHtml(String(data.preview.eligible)) + ' of ' +
+            escapeHtml(String(data.preview.total)) + ' matching contacts can be emailed.</p>';
+
+          (data.warnings || []).forEach(function (warning) {
+            html += '<p style="margin:0 0 4px;color:#b45309">' + escapeHtml(warning) + '</p>';
+          });
+
+          html += '<p class="muted" style="margin:6px 0 0">' + escapeHtml(data.disclaimer) + '</p>';
+          result.innerHTML = html;
+
+          // Hand the rules to the builder so every condition is visible and
+          // editable. Nothing is saved until the user presses save.
+          var builder = document.getElementById('segmentBuilder');
+          if (builder && typeof builder.loadDefinition === 'function') {
+            builder.loadDefinition(data.definition);
+          }
+        })
+        .catch(function () {
+          go.disabled = false;
+          result.innerHTML = '<span class="muted">Could not reach the AI just now.</span>';
+        });
+    });
+  })();
 
   /* ------------------------------------------------------- AI subject lines */
 

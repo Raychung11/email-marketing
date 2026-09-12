@@ -12,6 +12,7 @@ use App\Core\Session;
 use App\Core\View;
 use App\Mail\TemplateRenderer;
 use App\Services\AiCampaignService;
+use App\Services\AiSegmentService;
 use App\Services\TemplateService;
 
 /**
@@ -29,6 +30,7 @@ final class StudioController extends Controller
         Session $session,
         Config $config,
         private readonly AiCampaignService $studio,
+        private readonly AiSegmentService $aiSegments,
         private readonly TemplateService $templates,
         private readonly TemplateRenderer $renderer,
     ) {
@@ -94,6 +96,14 @@ final class StudioController extends Controller
             '/campaigns/' . $campaignId,
             'Saved as a draft. Read it over, then send it for checking when you are happy.'
         );
+    }
+
+    /** POST /segments/ai — describe a group of people, get rules back. */
+    public function suggestSegment(Request $request): Response
+    {
+        $data = $this->validate($request, ['description' => 'required|max:1000']);
+
+        return Response::json($this->aiSegments->suggest((string) $data['description']));
     }
 
     /** POST /campaigns/{id}/ai/subjects — alternative subject lines. */
