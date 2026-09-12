@@ -39,14 +39,16 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Queue abstraction + Redis/DB/sync drivers            | DONE |
 | Worker + Supervisor config + scheduler with locking  | DONE |
 | `AmazonSesProvider` (send, validateIdentity, getQuota, getReputationMetrics) | PARTIAL — requires `aws/aws-sdk-php` |
-| Sending domain verification wizard (DKIM/SPF/DMARC)  | TODO |
-| Block-based template builder                         | TODO |
-| Campaign CRUD + approval workflow                    | TODO |
-| Recipient snapshot + chunked enqueue                  | TODO |
+| Sending domain verification wizard (DKIM/SPF/DMARC)  | DONE |
+| Block-based template builder                         | DONE |
+| Campaign CRUD + approval workflow                    | DONE |
+| Recipient snapshot + chunked enqueue + send worker    | DONE |
+| Send throttling against tenant limit and live provider quota | DONE |
+| Second compliance check immediately before the provider call | DONE |
 | SNS event webhook `/webhooks/aws/ses` (signature verified, idempotent) | TODO |
-| Bounce/complaint → suppression                        | TODO |
-| Open/click tracking, link tracking, UTM builder       | TODO |
-| Deliverability dashboard + reputation alerts          | TODO |
+| Bounce/complaint → suppression                        | PARTIAL — `ProviderEventProcessor` in place, webhook not wired |
+| Open/click tracking, link tracking, UTM builder       | DONE |
+| Deliverability dashboard + reputation alerts          | PARTIAL — scheduler raises `reputation_alerts`, no dashboard |
 
 ## Phase 3 — AI
 

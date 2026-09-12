@@ -66,6 +66,34 @@ final class ReasonCode
     public const IMPORT_REFERENCE_REQUIRED     = 'IMPORT_REFERENCE_REQUIRED';
     public const IMPORT_ROW_LIMIT_EXCEEDED     = 'IMPORT_ROW_LIMIT_EXCEEDED';
 
+    /**
+     * Group a blocking reason into the snapshot's eligibility vocabulary.
+     *
+     * The audience preview, the recipient snapshot and the send-time recheck all
+     * have to bucket reasons the same way, or the campaign report contradicts the
+     * preview the sender approved. One function, three call sites.
+     */
+    public static function bucket(string $code): string
+    {
+        if (str_starts_with($code, 'SUPPRESSED_')) {
+            return 'suppressed';
+        }
+
+        if (in_array($code, [self::INVALID_EMAIL, self::MISSING_EMAIL], true)) {
+            return 'invalid';
+        }
+
+        if (str_starts_with($code, 'CONSENT_')
+            || str_ends_with($code, 'CONSENT_UNKNOWN')
+            || $code === self::RELATIONSHIP_TOO_OLD
+            || $code === self::US_OPTED_OUT
+        ) {
+            return 'no_consent';
+        }
+
+        return 'blocked';
+    }
+
     /** Map a suppression reason to its blocking reason code. */
     public static function forSuppression(string $suppressionReason): string
     {

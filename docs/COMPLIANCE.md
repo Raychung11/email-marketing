@@ -171,6 +171,25 @@ Removal is a deliberate, audited action limited to `compliance.manage`.
 - Every unsubscribe logs time, IP, user agent, campaign, message, email and
   organisation.
 
+## 7a. Tracking and the unsubscribe link
+
+The unsubscribe and preference links are **never** wrapped in click tracking.
+Routing the one link a recipient must be able to trust through an extra redirect
+adds a failure mode to the mechanism that protects deliverability, for no
+benefit — and a recipient who cannot unsubscribe presses "spam" instead, which
+costs every tenant on the platform.
+
+Tracking data is personal data. Open and click events are stored against the
+contact, carry IP and user agent, and are covered by the export and
+anonymisation paths in §10 like any other contact record. Both endpoints are
+opaque signed tokens: neither a contact id nor an email address appears in a
+tracking URL, so a forwarded email does not leak the recipient's identity to
+whoever it was forwarded to.
+
+Tracking can be turned off per deployment (`mail.tracking.open_pixel`,
+`mail.tracking.click_wrapping`). With click wrapping off, links are sent exactly
+as the author wrote them.
+
 ## 8. Consent lifecycle example
 
 ```

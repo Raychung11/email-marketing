@@ -180,8 +180,18 @@ final class CampaignRepository extends Repository
     {
         $row = $this->connection->selectOne(
             "SELECT
-                COUNT(*) AS sent,
-                SUM(CASE WHEN status IN ('delivered','opened','clicked') THEN 1 ELSE 0 END) AS delivered,
+                -- Rows the provider actually accepted. A failed handoff leaves a
+                -- row behind (so the attempt is on the record) and its retry
+                -- writes another; counting rows rather than accepted sends would
+                -- report a campaign as having sent messages it never did.
+                SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                -- An open or a click is proof the message arrived, so it counts as
+                -- delivered even when the provider's delivery notification never
+                -- reached us. ('opened' and 'clicked' are not message statuses:
+                -- engagement lives in its own timestamps.)
+                SUM(CASE WHEN status = 'delivered' OR opened_at IS NOT NULL OR clicked_at IS NOT NULL
+                         THEN 1 ELSE 0 END) AS delivered,
                 SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS unique_opens,
                 COALESCE(SUM(open_count), 0) AS opens,
                 SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS unique_clicks,

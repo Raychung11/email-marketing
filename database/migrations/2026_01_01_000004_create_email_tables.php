@@ -142,6 +142,11 @@ return new class extends Migration {
             $table->dateTime('approved_at')->nullable();
             $table->dateTime('send_started_at')->nullable();
             $table->dateTime('send_completed_at')->nullable();
+            // Set only when the recipient snapshot has been built to completion.
+            // A build that crashes or is paused half-way leaves this null, which
+            // is how the dispatcher knows to resume it rather than treat a
+            // partial audience as the whole audience.
+            $table->dateTime('snapshot_completed_at')->nullable();
             $table->enum('created_via', ['manual', 'ai', 'automation', 'template'])->default('manual');
             $table->bigInteger('ab_test_id')->unsigned()->nullable();
             $table->timestamps();

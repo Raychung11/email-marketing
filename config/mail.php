@@ -30,6 +30,11 @@ return [
     'throttle' => [
         'default_per_second' => (int) env('MAIL_RATE_PER_SECOND', 14),
         'respect_provider_quota' => true,
+        // The scheduler runs once a minute, so this is how much of the send rate
+        // one tick is allowed to enqueue. Enqueueing is not sending, but the
+        // workers drain as fast as they can, so bounding the queue is what
+        // actually keeps the provider's rate limit intact.
+        'dispatch_window_seconds' => 60,
     ],
 
     'tracking' => [

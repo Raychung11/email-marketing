@@ -19,6 +19,7 @@ use App\Controllers\Marketing\CampaignController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
+use App\Controllers\Public_\TrackingController;
 use App\Controllers\Public_\UnsubscribeController;
 use App\Controllers\Settings\DomainController;
 use App\Controllers\SettingsController;
@@ -74,6 +75,18 @@ return static function (Router $router): void {
     $router->post('/unsubscribe/{token}', UnsubscribeController::class . '@unsubscribe', [Throttle::class . ':60,60']);
     $router->get('/preferences/{token}', UnsubscribeController::class . '@preferences', [Throttle::class . ':60,60']);
     $router->post('/preferences/{token}', UnsubscribeController::class . '@updatePreferences', [Throttle::class . ':60,60']);
+
+    /*
+     * Open and click tracking.
+     *
+     * No auth and no CSRF: the caller is a mail client or a recipient's browser.
+     * The signed token is the authorisation, and the click endpoint resolves its
+     * destination from campaign_links rather than from the URL, so it cannot be
+     * turned into an open redirect. Throttled generously — a popular campaign
+     * produces a burst of legitimate traffic from one mail provider's egress.
+     */
+    $router->get('/track/open/{token}', TrackingController::class . '@open', [Throttle::class . ':600,60']);
+    $router->get('/track/click/{token}', TrackingController::class . '@click', [Throttle::class . ':600,60']);
 
     // ------------------------------------------------------- authenticated
     $authenticated = [Authenticate::class, BindTenant::class];

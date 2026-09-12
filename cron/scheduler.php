@@ -59,18 +59,20 @@ $schedule = static function (string $name, int $ttl, callable $callback) use ($l
  * ---------------------------------------------------------------------------
  */
 
-// Activate scheduled campaigns. In phase 2 this builds the recipient snapshot and
-// enqueues; for now it reports what is due so the plumbing is observable.
-$schedule('campaigns.activate', 300, static function () use ($connection, $clock, $logger): void {
-    $due = $connection->select(
-        "SELECT id, organisation_id, name FROM campaigns
-         WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
-         ORDER BY scheduled_at LIMIT 50",
-        [$clock->nowString()]
-    );
+// Activate scheduled campaigns, build their recipient snapshots and enqueue the
+// sends; also close out campaigns whose queue has drained.
+//
+// The lock TTL is generous because building a snapshot for a large audience is
+// genuinely slow, and a second tick starting half-way through the first is how a
+// campaign sends twice.
+$schedule('campaigns.dispatch', 900, static function () use ($container, $logger): void {
+    /** @var App\Services\CampaignDispatcher $dispatcher */
+    $dispatcher = $container->make(App\Services\CampaignDispatcher::class);
 
-    if ($due !== []) {
-        $logger->info('Campaigns due for activation', ['count' => count($due)]);
+    $summary = $dispatcher->tick(25);
+
+    if (array_sum($summary) > 0) {
+        $logger->info('Campaign dispatch tick', $summary);
     }
 });
 

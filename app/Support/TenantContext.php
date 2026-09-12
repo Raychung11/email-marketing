@@ -90,6 +90,45 @@ final class TenantContext
         return is_string($country) && $country !== '' ? $country : 'US';
     }
 
+    /**
+     * Capture the current binding so a cross-tenant operation can put it back.
+     *
+     * The scheduler and the queue worker walk several organisations in one
+     * process, binding and clearing as they go. Without this they would leave the
+     * caller with no tenant bound, which turns an unrelated later query into a
+     * confusing "no organisation is bound" rather than doing the right thing.
+     *
+     * @return array{organisation_id:int,workspace_id:?int,organisation:array<string,mixed>|null}|null
+     */
+    public function capture(): ?array
+    {
+        if ($this->organisationId === null) {
+            return null;
+        }
+
+        return [
+            'organisation_id' => $this->organisationId,
+            'workspace_id'    => $this->workspaceId,
+            'organisation'    => $this->organisation,
+        ];
+    }
+
+    /** @param array{organisation_id:int,workspace_id:?int,organisation:array<string,mixed>|null}|null $captured */
+    public function restore(?array $captured): void
+    {
+        $this->clear();
+
+        if ($captured === null) {
+            return;
+        }
+
+        $this->bind(
+            (int) $captured['organisation_id'],
+            $captured['workspace_id'],
+            $captured['organisation']
+        );
+    }
+
     /** @param array<string,mixed> $organisation */
     public function refresh(array $organisation): void
     {

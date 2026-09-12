@@ -173,27 +173,65 @@ it does not hardcode jurisdictions.
 > The platform provides compliance-*supporting* controls. It does not provide
 > legal advice. See `docs/COMPLIANCE.md`.
 
-## 8. Sending pipeline (Phase 2 target, interfaces in place now)
+## 8. Sending pipeline
 
 ```
 campaign scheduled
-  → scheduler picks it up (locked)
-  → recipient SNAPSHOT written to campaign_recipients
-        (segment is NOT re-evaluated once sending starts)
-  → each eligible recipient enqueued to Redis: email_marketing
-  → worker: re-run ComplianceService  →  render  →  provider->send()
+  → scheduler picks it up (named advisory lock: campaigns.dispatch)
+  → recipient SNAPSHOT written to campaign_recipients, chunked
+        → snapshot_completed_at stamped only when the build finishes
+  → status: scheduled → sending
+  → each eligible recipient enqueued to email_marketing (one job per recipient)
+  → worker: re-run ComplianceService → render → rewrite links → provider->send()
   → provider_message_id stored on email_messages
   → SNS/webhook events → email_events (idempotent on provider_event_id)
   → hard bounce / complaint → suppression
-  → analytics rollups → AI post-campaign analysis
+  → queue drains → status: sending → completed, counters recomputed
 ```
+
+`CampaignDispatcher` owns everything left of the queue; `SendCampaignEmail`
+owns everything right of it. Four properties hold across the boundary:
+
+**The snapshot is taken once.** A segment is a live query. If it were re-run
+mid-send, a contact added afterwards would receive a campaign whose audience
+nobody reviewed, and one who stopped matching would be half-sent.
+`snapshot_completed_at` is what separates "finished" from "interrupted": a build
+that crashes leaves it null and resumes from the highest `contact_id` already
+written, because the snapshot is built in contact-id order.
+
+**The snapshot records who was *not* sent to, and why.** Ineligible contacts get
+a row with a `ReasonCode` rather than being filtered out. "We sent to 1,327 of
+1,482, and here is why the other 155 were held back" is a compliance record;
+sending to 1,327 silently is just a number. The campaign page reads this rather
+than re-running the segment, so a campaign sent last week still reports the
+audience it actually had.
+
+**Compliance is checked twice.** Once when the snapshot is built, and again in
+the worker immediately before `provider->send()`. Hours can pass between them,
+and in that time a contact can unsubscribe, bounce or complain. The preview never
+authorises a send.
+
+**A job that runs twice sends once.** `claimForSending()` is a conditional
+UPDATE from `pending|queued` to `sent`; a redelivered message claims nothing.
+That guarantee is what lets the dispatcher enqueue *before* marking the row
+queued — a duplicate job that sends nothing is a far better failure than a
+recipient silently lost between the two writes.
+
+Throttling takes the lower of two ceilings per scheduler tick: the tenant's
+`daily_send_limit` (a calendar day in *their* timezone, because that is what
+their plan says) and the provider's live quota read from `getQuota()` — not a
+configured guess, because exceeding an SES rate limit produces throttling errors
+that look like bounces and damage every tenant's reputation, not just the one
+that caused them.
 
 Queues: `email_high_priority`, `email_transactional`, `email_marketing`,
 `email_retry`. Retry backoff 1m → 5m → 30m → 2h, then dead-letter. Permanent
 failures are not retried.
 
-**Never** send bulk email inside an HTTP request. **Never** load a full
-recipient set into memory — repositories expose chunked cursors.
+**Never** send bulk email inside an HTTP request — the dispatcher refuses to run
+on the sync queue driver outside the test environment. **Never** load a full
+recipient set into memory — the snapshot is written and read through keyset
+generators, so a 100k campaign never holds more than one chunk at a time.
 
 ## 9. Data volume assumptions
 
@@ -203,7 +241,9 @@ recipient campaigns per organisation without redesign:
 - composite indexes always lead with `organisation_id`
 - `email_normalized` unique per organisation for deduplication
 - event tables are append-only and partition-ready on `event_at`
-- all batch work is chunked (`ChunkedCursor`), never `fetchAll()`
+- all batch work is chunked — `QueryBuilder::cursor()`, `chunkById()` and
+  keyset generators such as `CampaignRecipientRepository::pendingBatches()` —
+  never `fetchAll()` over a recipient set
 - counts that are expensive (segment size) are cached and refreshed by cron
 
 ## 10. Channel abstraction
@@ -239,3 +279,30 @@ contact IDs, and an append-only `audit_logs` table separate from operational
 `activity_logs`.
 
 Secrets live in the environment, never in the database or in JavaScript.
+
+**Click tracking is not an open redirect.** `/track/click/{token}` takes a signed
+token carrying a `campaign_links` row id — never a destination. The URL is read
+from that row, which an authenticated user put into a campaign, and re-checked to
+be `http(s)` before it reaches a `Location` header. A forged token fails the
+signature; a genuine one has nothing in it to substitute. The tracking endpoints
+are also the only place tenancy comes from a URL, and only because the payload is
+our own HMAC and is verified before a single field is read from it.
+
+## 13. Tracking and what it is worth
+
+Opens are recorded because customers expect the number, and are treated as weak
+evidence everywhere they are reported: mail privacy proxies pre-fetch images, so
+an "open" can mean a server in another country requested a pixel and the
+recipient never saw the message. Repeated fetches inside the same minute are
+collapsed through the same unique index that makes provider redeliveries
+idempotent, and `opened_at` is written once so unique opens stay unique.
+
+Clicks are the strongest first-party signal the system has — they required a
+person, a device and an intent — and every piece of analysis weights them above
+opens.
+
+Neither ever changes `email_messages.status`. That column records what the
+provider did with the message; engagement lives in its own timestamps and
+counters, so a missed delivery notification cannot be papered over by a pixel
+fetch. Campaign counters are recomputed from `email_messages` rather than
+incremented, so a replayed or missed event cannot skew them permanently.

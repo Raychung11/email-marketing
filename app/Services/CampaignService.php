@@ -10,6 +10,7 @@ use App\Core\Config;
 use App\Core\HttpException;
 use App\Core\ValidationException;
 use App\Mail\TemplateRenderer;
+use App\Repositories\CampaignRecipientRepository;
 use App\Repositories\CampaignRepository;
 use App\Repositories\ListRepository;
 use App\Repositories\SegmentRepository;
@@ -41,6 +42,7 @@ final class CampaignService
 
     public function __construct(
         private readonly CampaignRepository $campaigns,
+        private readonly CampaignRecipientRepository $recipients,
         private readonly SegmentRepository $segments,
         private readonly ListRepository $lists,
         private readonly TemplateRepository $templates,
@@ -215,6 +217,33 @@ final class CampaignService
             'blocked'     => $preview['blocked'],
             'description' => $this->audienceDescription($campaign),
         ];
+    }
+
+    /**
+     * What actually happened, from the recipient snapshot.
+     *
+     * Once a campaign has a snapshot this replaces the live audience preview on
+     * the campaign page, and the distinction matters: the preview is a query
+     * against the segment as it is *now*, which for a campaign that went out last
+     * Tuesday is a different set of people. The snapshot is the record of who was
+     * actually considered, who was sent to, and who was held back and why.
+     *
+     * @return array{total:int,eligible:int,suppressed:int,no_consent:int,invalid:int,blocked:int,description:string,send_status:array<string,int>,skip_reasons:array<string,int>,remaining:int}|null
+     */
+    public function deliveryReport(int $id): ?array
+    {
+        if (!$this->campaigns->hasSnapshot($id)) {
+            return null;
+        }
+
+        $campaign = $this->campaigns->findOrFailDecoded($id);
+
+        return array_merge($this->recipients->eligibilitySummary($id), [
+            'description'  => $this->audienceDescription($campaign),
+            'send_status'  => $this->recipients->sendStatusBreakdown($id),
+            'skip_reasons' => $this->recipients->skipReasons($id),
+            'remaining'    => $this->recipients->remaining($id),
+        ]);
     }
 
     /**

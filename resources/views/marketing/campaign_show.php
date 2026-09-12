@@ -146,8 +146,11 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
     <?php elseif ($status === 'sending'): ?>
       <div class="alert alert--info" style="margin-bottom:12px">
         <strong>Sending</strong>
-        <?= number_format((int) $campaign['sent_count']) ?> of
-        <?= number_format((int) $campaign['eligible_count']) ?> handed to the provider so far.
+        <?php // Read live from the snapshot: the campaign counters are a rollup
+              // refreshed when the send finishes, so mid-flight they lag. ?>
+        <?= number_format((int) ($delivery['send_status']['sent'] ?? $campaign['sent_count'])) ?> of
+        <?= number_format((int) ($delivery['eligible'] ?? $campaign['eligible_count'])) ?>
+        handed to the provider so far.
       </div>
       <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/pause"
             data-confirm="Pause this send? Messages already with the provider cannot be recalled.">
@@ -248,12 +251,19 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
 
   <div class="col col--narrow">
     <div class="card">
-      <div class="card__head"><h2>Audience</h2></div>
+      <div class="card__head"><h2><?= $delivery === null ? 'Audience' : 'Who this went to' ?></h2></div>
       <div class="card__body">
         <p class="small mt-0"><strong><?= e($audience['description']) ?></strong></p>
 
+        <?php if ($delivery !== null): ?>
+          <p class="tiny muted mt-0">
+            Taken from the recipient snapshot recorded when this campaign started,
+            not from re-running the segment today.
+          </p>
+        <?php endif; ?>
+
         <div class="stat" style="border:0;box-shadow:none;padding:0">
-          <div class="stat__label">Will receive this</div>
+          <div class="stat__label"><?= $delivery === null ? 'Will receive this' : 'Eligible at send time' ?></div>
           <div class="stat__value"><?= number_format($audience['eligible']) ?></div>
           <div class="stat__meta">of <?= number_format($audience['total']) ?> matching contacts</div>
         </div>
@@ -272,6 +282,36 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
           <?php endif; ?>
           <?php if ($audience['blocked'] > 0): ?>
             <div class="flex-between small"><span>Blocked</span><strong><?= number_format($audience['blocked']) ?></strong></div>
+          <?php endif; ?>
+        <?php endif; ?>
+
+        <?php if ($delivery !== null): ?>
+          <hr class="sep">
+          <p class="tiny muted mt-0">Delivery progress:</p>
+          <?php foreach ([
+              'sent'    => 'Handed to the provider',
+              'queued'  => 'Queued',
+              'pending' => 'Still to queue',
+              'skipped' => 'Skipped at send time',
+              'failed'  => 'Rejected by the provider',
+          ] as $key => $label): ?>
+            <?php if (($delivery['send_status'][$key] ?? 0) > 0): ?>
+              <div class="flex-between small">
+                <span><?= e($label) ?></span>
+                <strong><?= number_format((int) $delivery['send_status'][$key]) ?></strong>
+              </div>
+            <?php endif; ?>
+          <?php endforeach; ?>
+
+          <?php if ($delivery['skip_reasons'] !== []): ?>
+            <hr class="sep">
+            <p class="tiny muted mt-0">Reasons recipients were held back:</p>
+            <?php foreach ($delivery['skip_reasons'] as $code => $count): ?>
+              <div class="flex-between tiny">
+                <span title="<?= e($code) ?>"><?= e(App\Compliance\ReasonCode::describe((string) $code)) ?></span>
+                <strong><?= number_format((int) $count) ?></strong>
+              </div>
+            <?php endforeach; ?>
           <?php endif; ?>
         <?php endif; ?>
       </div>

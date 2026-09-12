@@ -90,9 +90,16 @@ final class CampaignController extends Controller
         $id       = (int) $request->route('id');
         $campaign = $this->campaigns->find($id);
 
+        // Once a campaign has a recipient snapshot, that is the authoritative
+        // answer to "who did this go to" — re-running the segment would report the
+        // audience as it is today, which for a campaign sent last week is a
+        // different set of people.
+        $delivery = $this->campaigns->deliveryReport($id);
+
         return $this->render('marketing.campaign_show', [
             'campaign' => $campaign,
-            'audience' => $this->campaigns->audience($id),
+            'audience' => $delivery ?? $this->campaigns->audience($id),
+            'delivery' => $delivery,
             'findings' => $campaign['validation_findings'],
             'statuses' => $this->statuses(),
             'types'    => $this->types(),

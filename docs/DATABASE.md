@@ -153,6 +153,24 @@ reported audience matches what actually went out.
 `ComplianceService`, which is why a campaign report can say *why* 112 people were
 skipped rather than just that they were.
 
+`send_status` moves `pending → queued → sent`, and the `queued → sent` step is a
+conditional UPDATE (`claimForSending()`). That single statement is what makes the
+send job idempotent: a redelivered queue message claims nothing and sends
+nothing.
+
+Completeness lives on the campaign, not here: `campaigns.snapshot_completed_at`
+is stamped only when the whole audience has been written. A build interrupted
+part-way leaves it null, and the dispatcher resumes from
+`MAX(contact_id)` for that campaign — which is correct because rows are written
+in contact-id order.
+
+```
+UNIQUE uniq_campaign_contact (campaign_id, contact_id)
+```
+
+The unique index is the backstop: a resumed build that overlapped its watermark
+cannot write a contact twice, so nobody receives the same campaign twice.
+
 ### `email_events` — idempotent by index
 
 ```

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Compliance\ComplianceService;
+use App\Compliance\ReasonCode;
 use App\Core\Config;
 use App\Database\QueryBuilder;
 use App\Repositories\SegmentRepository;
@@ -202,22 +203,6 @@ final class SegmentService
 
     private function bucketFor(string $reason): string
     {
-        if (str_starts_with($reason, 'SUPPRESSED_')) {
-            return 'suppressed';
-        }
-
-        if (in_array($reason, ['INVALID_EMAIL', 'MISSING_EMAIL'], true)) {
-            return 'invalid';
-        }
-
-        if (str_starts_with($reason, 'CONSENT_')
-            || str_ends_with($reason, 'CONSENT_UNKNOWN')
-            || $reason === 'RELATIONSHIP_TOO_OLD'
-            || $reason === 'US_OPTED_OUT'
-        ) {
-            return 'no_consent';
-        }
-
-        return 'blocked';
+        return ReasonCode::bucket($reason);
     }
 }
