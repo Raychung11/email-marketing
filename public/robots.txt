@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /unsubscribe/
+Disallow: /preferences/
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /contacts
+Disallow: /settings

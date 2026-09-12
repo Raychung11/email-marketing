@@ -1,0 +1,7 @@
+# AI Growth Hub — one entry only.
+#
+# scheduler.php takes a named, expiring lock per job, so an overlapping minute
+# cannot double-run anything. Adding more cron entries is how campaigns get sent
+# twice; do not.
+
+* * * * * cd /var/www/aigrowthhub && php cron/scheduler.php >> storage/logs/scheduler.log 2>&1

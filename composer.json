@@ -1,0 +1,42 @@
+{
+    "name": "aigrowthhub/platform",
+    "description": "AI Customer Growth & Retention Platform - multi-tenant SaaS for CRM, email marketing, automation and revenue attribution.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.3",
+        "ext-pdo": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*"
+    },
+    "suggest": {
+        "ext-redis": "Required for the Redis-backed queue driver and rate limiting in production.",
+        "aws/aws-sdk-php": "Required by the Amazon SES email provider (Phase 2).",
+        "ext-intl": "Improves locale-aware formatting."
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        },
+        "files": [
+            "app/Support/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "migrate": "php cron/console.php migrate",
+        "test": "php tests/run.php"
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}
