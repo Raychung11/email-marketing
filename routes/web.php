@@ -15,6 +15,7 @@ use App\Controllers\Crm\SuppressionController;
 use App\Controllers\Crm\TagController;
 use App\Controllers\DashboardController;
 use App\Controllers\HealthController;
+use App\Controllers\Marketing\CampaignController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
@@ -315,6 +316,73 @@ return static function (Router $router): void {
         ]);
         $router->post('/settings/custom-fields/{id}/delete', SettingsController::class . '@destroyCustomField', [
             RequirePermission::class . ':settings.manage',
+        ]);
+
+        // ---------------------------------------------------------- campaigns
+        $router->get('/campaigns', CampaignController::class . '@index', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/campaigns/create', CampaignController::class . '@create', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns', CampaignController::class . '@store', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->get('/campaigns/{id}', CampaignController::class . '@show', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/campaigns/{id}/edit', CampaignController::class . '@edit', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->post('/campaigns/{id}', CampaignController::class . '@update', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->get('/campaigns/{id}/preview', CampaignController::class . '@preview', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->post('/campaigns/{id}/validate', CampaignController::class . '@validateCampaign', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->post('/campaigns/{id}/submit', CampaignController::class . '@submit', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+
+        /*
+         * Approval. The permission is necessary but not sufficient: the service
+         * also refuses to let the author approve their own campaign, which the
+         * permission matrix cannot express because a marketing manager
+         * legitimately holds both permissions.
+         */
+        $router->post('/campaigns/{id}/approve', CampaignController::class . '@approve', [
+            RequirePermission::class . ':campaigns.approve',
+        ]);
+        $router->post('/campaigns/{id}/request-changes', CampaignController::class . '@requestChanges', [
+            RequirePermission::class . ':campaigns.approve',
+        ]);
+
+        $router->post('/campaigns/{id}/schedule', CampaignController::class . '@schedule', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/send', CampaignController::class . '@sendNow', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/unschedule', CampaignController::class . '@unschedule', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/pause', CampaignController::class . '@pause', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/resume', CampaignController::class . '@resume', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/cancel', CampaignController::class . '@cancel', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/duplicate', CampaignController::class . '@duplicate', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns/{id}/delete', CampaignController::class . '@destroy', [
+            RequirePermission::class . ':campaigns.edit',
         ]);
 
         // ---------------------------------------------------------- templates

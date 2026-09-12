@@ -36,7 +36,7 @@ return [
         'icon'       => 'send',
         'permission' => 'campaigns.view',
         'children'   => [
-            ['label' => 'Campaigns',         'route' => '/campaigns',        'permission' => 'campaigns.view',   'phase' => 2],
+            ['label' => 'Campaigns',         'route' => '/campaigns',        'permission' => 'campaigns.view'],
             ['label' => 'Templates',         'route' => '/templates',        'permission' => 'templates.manage'],
             ['label' => 'AI Campaign Studio', 'route' => '/ai/studio',       'permission' => 'ai.use',           'phase' => 3],
             ['label' => 'Content Library',   'route' => '/content-library',  'permission' => 'templates.manage', 'phase' => 6],
