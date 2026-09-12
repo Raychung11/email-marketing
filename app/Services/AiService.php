@@ -22,6 +22,18 @@ use App\Support\TenantContext;
  */
 final class AiService
 {
+    /**
+     * The feature vocabulary `ai_requests.feature` declares.
+     *
+     * Kept here so a caller that invents a name records an 'other' row and a log
+     * line rather than putting a database constraint violation in front of a
+     * customer who only asked for a subject line.
+     */
+    private const FEATURES = [
+        'campaign_studio', 'subject_lines', 'content', 'segment_generator',
+        'campaign_analysis', 'assistant', 'recommendations', 'insights', 'other',
+    ];
+
     public function __construct(
         private readonly AiProviderInterface $provider,
         private readonly AiGuard $guard,
@@ -30,6 +42,7 @@ final class AiService
         private readonly Clock $clock,
         private readonly TenantContext $tenant,
         private readonly AuditService $audit,
+        private readonly \App\Core\Logger $logger,
     ) {
     }
 
@@ -114,13 +127,23 @@ final class AiService
 
     private function record(AiRequest $request, AiResponse $response, string $status): void
     {
+        $feature = $request->feature;
+
+        if (!in_array($feature, self::FEATURES, true)) {
+            $this->logger->warning('Unknown AI feature name; recording it as "other".', [
+                'feature' => $feature,
+            ]);
+
+            $feature = 'other';
+        }
+
         $this->connection->table('ai_requests')->insert([
             'organisation_id'     => $this->tenant->organisationId(),
             'user_id'             => $request->userId,
             'uuid'                => uuid4(),
             'provider'            => $this->provider->name(),
             'model'               => $response->model,
-            'feature'             => $request->feature,
+            'feature'             => $feature,
             'prompt_tokens'       => $response->promptTokens,
             'completion_tokens'   => $response->completionTokens,
             'total_tokens'        => $response->totalTokens(),

@@ -54,10 +54,17 @@ $value = static function (string $field, string $default = '') use ($campaign, $
             <input id="subject" type="text" name="subject" maxlength="255" value="<?= e($value('subject')) ?>"
                    placeholder="Your annual plumbing check is due">
             <div class="hint">
-              Say what the email is. Subject lines that fake a reply or a transaction
-              (<span class="mono">Re:</span>, <span class="mono">Your order confirmation</span>) are refused
-              by the validator for US recipients.
+              Say what the email is. A subject that pretends to be a reply or a receipt
+              (<span class="mono">Re:</span>, <span class="mono">Your order confirmation</span>) will be
+              refused — in the US that one is against the law, not just bad manners.
             </div>
+            <?php if ($campaign !== null): ?>
+              <button class="btn btn--sm mt-1" type="button"
+                      data-ai-subjects="/campaigns/<?= (int) $campaign['id'] ?>/ai/subjects">
+                Suggest some subject lines
+              </button>
+              <div class="ai-subjects tiny" hidden></div>
+            <?php endif; ?>
           </div>
 
           <div class="field">

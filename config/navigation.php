@@ -44,7 +44,7 @@ return [
         'children'   => [
             ['label' => 'Campaigns',         'route' => '/campaigns',        'permission' => 'campaigns.view'],
             ['label' => 'Templates',         'route' => '/templates',        'permission' => 'templates.manage'],
-            ['label' => 'AI Campaign Studio', 'route' => '/ai/studio',       'permission' => 'ai.use',           'phase' => 3],
+            ['label' => 'Write it for me',   'route' => '/ai/studio',        'permission' => 'ai.use'],
             ['label' => 'Content Library',   'route' => '/content-library',  'permission' => 'templates.manage', 'phase' => 6],
             ['label' => 'A/B Tests',         'route' => '/ab-tests',         'permission' => 'campaigns.view',   'phase' => 6],
         ],

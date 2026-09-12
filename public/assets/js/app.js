@@ -332,6 +332,75 @@
     sync();
   }
 
+  /* ------------------------------------------------------- AI subject lines */
+
+  /*
+   * Fetches suggestions and writes them next to the field. They are never
+   * applied automatically: the person sending the email chooses the subject
+   * line, because they are the one whose name is on it.
+   */
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-ai-subjects]');
+    if (!button) { return; }
+
+    var panel = button.parentNode.querySelector('.ai-subjects');
+    var input = document.getElementById('subject');
+    if (!panel) { return; }
+
+    button.disabled = true;
+    panel.hidden = false;
+    panel.innerHTML = '<span class="muted">Thinking…</span>';
+
+    var body = new FormData();
+    body.append('_token', token());
+
+    fetch(button.getAttribute('data-ai-subjects'), {
+      method: 'POST',
+      body: body,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        button.disabled = false;
+
+        var subjects = (data && data.subjects) || [];
+
+        if (!subjects.length) {
+          panel.innerHTML = '<span class="muted">Nothing came back. Try again in a moment.</span>';
+          return;
+        }
+
+        var html = '<p class="muted" style="margin:8px 0 4px">Suggestions — press one to use it:</p><ul style="margin:0;padding-left:18px">';
+
+        subjects.forEach(function (item) {
+          html += '<li style="margin-bottom:4px">' +
+            '<a href="#" data-ai-subject="' + escapeHtml(item.subject) + '">' +
+            escapeHtml(item.subject) + '</a>' +
+            (item.why ? ' <span class="muted">— ' + escapeHtml(item.why) + '</span>' : '') +
+            '</li>';
+        });
+
+        panel.innerHTML = html + '</ul>';
+      })
+      .catch(function () {
+        button.disabled = false;
+        panel.innerHTML = '<span class="muted">Could not reach the AI just now.</span>';
+      });
+
+    if (input) { input.focus(); }
+  });
+
+  document.addEventListener('click', function (event) {
+    var link = event.target.closest('[data-ai-subject]');
+    if (!link) { return; }
+
+    event.preventDefault();
+
+    var input = document.getElementById('subject');
+    if (input) { input.value = link.getAttribute('data-ai-subject'); input.focus(); }
+  });
+
   /* ------------------------------------------------------------------- helpers */
 
   function debounce(fn, wait) {

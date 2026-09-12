@@ -358,7 +358,46 @@ All of the reporting SQL runs on MySQL and SQLite alike (`SUBSTR` + `INSTR`
 rather than `SUBSTRING_INDEX`), so the test suite exercises the same queries
 production runs.
 
-## 15. Tracking and what it is worth
+## 15. What AI output is treated as
+
+A model's reply is attacker-influenced input. The brief that produced it carries
+customer data, and customer data can carry instructions, so everything coming
+back from a provider is handled like a proposal from a stranger.
+
+**It becomes blocks, never HTML.** The model picks from five of the thirteen
+block types — heading, text, button, divider, spacer — and fills in their
+settings. The result then goes through `TemplateService::validateBlocks()` and
+`TemplateRenderer::sanitiseRichText()`, the same calls a person's blocks make.
+There is no laxer path for AI content, and therefore no route by which a model
+can put a script tag, a style attribute or an event handler into an email. The
+eight excluded block types are excluded because coupon codes, product prices and
+images are commitments a business makes to a customer; a person types those.
+
+**It cannot invent a link.** Any URL in the reply must match the one URL the
+brief supplied, compared on host and path. Anything else is replaced with an
+empty href, because a plausible URL that 404s gets sent and an empty button gets
+fixed.
+
+**It cannot invent a merge field.** Unknown `{{tokens}}` are stripped against
+`blocks.merge_fields`, so nobody receives an email addressed to
+`{{customer_name}}`.
+
+**Every removal is reported.** Silently dropping a made-up link would leave
+somebody looking at a draft with no button and no idea why, so the draft carries
+a `warnings` list the screen shows.
+
+**It cannot produce something ready to send.** What the studio creates is a draft,
+through the ordinary `CampaignService`, and it goes through validation, review and
+approval exactly like one a person wrote. `AiGuard` refuses the send action
+outright, and `AiCampaignService::createCampaign()` re-checks that before it
+writes anything.
+
+Every call is metered into `ai_requests` against a monthly cap, and only a hash
+of the prompt is stored — enough to correlate and de-duplicate, not a permanent
+copy of everything a customer has typed about their business. Provider errors go
+to the log; the user gets a sentence they can act on.
+
+## 16. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

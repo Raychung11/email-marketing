@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\Auth\LoginController;
 use App\Controllers\Auth\PasswordController;
 use App\Controllers\Auth\RegisterController;
+use App\Controllers\Ai\StudioController;
 use App\Controllers\AnalyticsController;
 use App\Controllers\ComplianceController;
 use App\Controllers\Crm\CompanyController;
@@ -105,6 +106,26 @@ return static function (Router $router): void {
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
+        /*
+         * ------------------------------------------------------------------ AI
+         *
+         * Everything here produces a draft or a suggestion. Nothing sends, and
+         * nothing skips review: an AI-written campaign lands in the same draft
+         * state as one somebody typed and needs the same approval.
+         */
+        $router->get('/ai/studio', StudioController::class . '@index', [
+            RequirePermission::class . ':ai.use',
+        ]);
+        $router->post('/ai/studio', StudioController::class . '@draft', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':30,3600',
+        ]);
+        $router->post('/ai/studio/keep', StudioController::class . '@keep', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns/{id}/ai/subjects', StudioController::class . '@subjects', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
+        ]);
+
         // ---------------------------------------------------------- analytics
         $router->get('/analytics', AnalyticsController::class . '@index', [
             RequirePermission::class . ':analytics.view',
