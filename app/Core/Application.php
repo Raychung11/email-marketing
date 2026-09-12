@@ -274,6 +274,11 @@ final class Application
         $c->singleton(\App\Support\DnsResolver::class, static fn (): \App\Support\DnsResolver
             => new \App\Support\SystemDnsResolver());
 
+        // Used to fetch the SNS signing certificate. An interface so a test can
+        // verify a real signature without reaching the internet.
+        $c->singleton(\App\Support\HttpFetcher::class, static fn (Container $c): \App\Support\HttpFetcher
+            => new \App\Support\CurlHttpFetcher($c->make(Logger::class)));
+
         // --- AI -------------------------------------------------------------
         $c->singleton(\App\AI\AiProviderInterface::class, static function (Container $c): \App\AI\AiProviderInterface {
             $config   = $c->make(Config::class);

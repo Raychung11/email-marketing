@@ -45,8 +45,8 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Recipient snapshot + chunked enqueue + send worker    | DONE |
 | Send throttling against tenant limit and live provider quota | DONE |
 | Second compliance check immediately before the provider call | DONE |
-| SNS event webhook `/webhooks/aws/ses` (signature verified, idempotent) | TODO |
-| Bounce/complaint → suppression                        | PARTIAL — `ProviderEventProcessor` in place, webhook not wired |
+| SNS event webhook `/webhooks/aws/ses` (signature verified, idempotent) | DONE |
+| Bounce/complaint → suppression                        | DONE |
 | Open/click tracking, link tracking, UTM builder       | DONE |
 | Deliverability dashboard + reputation alerts          | PARTIAL — scheduler raises `reputation_alerts`, no dashboard |
 

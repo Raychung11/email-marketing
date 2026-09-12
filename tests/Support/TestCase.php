@@ -250,6 +250,35 @@ abstract class TestCase
         ));
     }
 
+    /**
+     * POST a JSON body with no session and no CSRF token — the shape a provider
+     * webhook actually arrives in.
+     *
+     * @param array<string,mixed> $body
+     */
+    protected function postJson(string $path, array $body): Response
+    {
+        return $this->postRaw($path, (string) json_encode($body, JSON_UNESCAPED_SLASHES));
+    }
+
+    /** POST a raw body, so a test can send something that is not valid JSON. */
+    protected function postRaw(string $path, string $body, string $contentType = 'text/plain'): Response
+    {
+        return $this->app->handle(new Request(
+            [],
+            [],
+            [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI'    => $path,
+                'REMOTE_ADDR'    => '203.0.113.10',
+                'CONTENT_TYPE'   => $contentType,
+            ],
+            [],
+            [],
+            $body
+        ));
+    }
+
     /** @param array<string,mixed> $body */
     protected function apiRequest(string $method, string $path, string $apiKey, array $body = []): Response
     {

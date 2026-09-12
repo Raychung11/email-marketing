@@ -288,7 +288,42 @@ signature; a genuine one has nothing in it to substitute. The tracking endpoints
 are also the only place tenancy comes from a URL, and only because the payload is
 our own HMAC and is verified before a single field is read from it.
 
-## 13. Tracking and what it is worth
+## 13. Inbound provider events
+
+`POST /webhooks/aws/ses` is a public, unauthenticated URL — it has to be, because
+Amazon has no credentials of ours to present — so everything rests on two checks
+in order:
+
+1. **The SNS signature must verify.** Forging one would let an anonymous caller
+   suppress a rival's entire mailing list, or clear bounces off their own. Within
+   that, the check that matters most is the one that is easiest to leave out: the
+   *signing certificate URL must be on an Amazon SNS host*, anchored at both ends
+   of the hostname. A pattern that merely contains `amazonaws.com` would accept
+   `sns.amazonaws.com.evil.test`, and an attacker would then sign their forgery
+   with their own key and hand us the matching certificate. The timestamp is
+   checked too: a valid signature stays valid for ever, so without a freshness
+   window a captured message could be replayed a year later.
+
+2. **The topic must be ours.** A valid Amazon signature only proves *Amazon* sent
+   it. Anyone with an AWS account can publish to their own topic and point it at
+   our URL.
+
+Tenancy is never taken from the payload. The organisation is resolved from our
+own `email_messages` row via the provider's message id, so a hostile payload
+naming another organisation changes nothing — the field is not read.
+
+One SES notification can name several recipients; it is split into one event per
+address, because recording it as a single event would leave the other addresses
+still receiving mail. Each gets a stable id derived from the SNS message id and
+the address, so a redelivery collides with the unique index and becomes a no-op.
+
+The response is 200 for anything we decide to ignore. SNS retries non-2xx
+responses for hours, and a payload we have already rejected on its merits will
+not become acceptable on the twentieth attempt. The single exception is a failed
+signature, which answers 403: that caller is not Amazon, so there is no retry
+storm to cause, and an operator reading their logs should see it plainly.
+
+## 14. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

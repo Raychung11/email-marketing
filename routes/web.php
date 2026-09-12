@@ -19,6 +19,7 @@ use App\Controllers\Marketing\CampaignController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
+use App\Controllers\Public_\SesWebhookController;
 use App\Controllers\Public_\TrackingController;
 use App\Controllers\Public_\UnsubscribeController;
 use App\Controllers\Settings\DomainController;
@@ -87,6 +88,15 @@ return static function (Router $router): void {
      */
     $router->get('/track/open/{token}', TrackingController::class . '@open', [Throttle::class . ':600,60']);
     $router->get('/track/click/{token}', TrackingController::class . '@click', [Throttle::class . ':600,60']);
+
+    /*
+     * Amazon SES delivery notifications, via SNS.
+     *
+     * No auth and no CSRF — Amazon has no credentials of ours to present. The SNS
+     * signature is the authentication, and the controller checks it before it
+     * reads anything else out of the body.
+     */
+    $router->post('/webhooks/aws/ses', SesWebhookController::class . '@handle', [Throttle::class . ':1000,60']);
 
     // ------------------------------------------------------- authenticated
     $authenticated = [Authenticate::class, BindTenant::class];
