@@ -40,6 +40,10 @@ final class SmokeTest extends TestCase
         $lists  = $this->container->make(\App\Repositories\ListRepository::class);
         $listId = $lists->create('Smoke list');
 
+        /** @var \App\Services\TemplateService $templates */
+        $templates  = $this->container->make(\App\Services\TemplateService::class);
+        $templateId = $templates->create('Smoke template', $templates->starterBlocks('promotion'));
+
         /** @var \App\Repositories\CompanyRepository $companies */
         $companies = $this->container->make(\App\Repositories\CompanyRepository::class);
         $companyId = $companies->firstOrCreate('Smoke Co');
@@ -61,6 +65,9 @@ final class SmokeTest extends TestCase
             '/tags',
             '/lists',
             '/lists/' . $listId,
+            '/templates',
+            '/templates/create',
+            '/templates/create?category=promotion',
             '/segments',
             '/segments/create',
             '/segments/' . $segmentId,
@@ -72,6 +79,7 @@ final class SmokeTest extends TestCase
             '/settings',
             '/settings/brand',
             '/settings/domains',
+            '/templates/' . $templateId . '/edit',
             '/settings/custom-fields',
             '/settings/profile',
             '/onboarding',

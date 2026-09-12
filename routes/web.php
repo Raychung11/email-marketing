@@ -15,6 +15,7 @@ use App\Controllers\Crm\SuppressionController;
 use App\Controllers\Crm\TagController;
 use App\Controllers\DashboardController;
 use App\Controllers\HealthController;
+use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
 use App\Controllers\Public_\UnsubscribeController;
@@ -314,6 +315,36 @@ return static function (Router $router): void {
         ]);
         $router->post('/settings/custom-fields/{id}/delete', SettingsController::class . '@destroyCustomField', [
             RequirePermission::class . ':settings.manage',
+        ]);
+
+        // ---------------------------------------------------------- templates
+        $router->get('/templates', TemplateController::class . '@index', [
+            RequirePermission::class . ':templates.manage,campaigns.view',
+        ]);
+        $router->get('/templates/create', TemplateController::class . '@create', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates', TemplateController::class . '@store', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        // Server-rendered preview: the editor shows exactly what will be sent.
+        $router->post('/templates/preview', TemplateController::class . '@preview', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->get('/templates/{id}/edit', TemplateController::class . '@edit', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}', TemplateController::class . '@update', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/duplicate', TemplateController::class . '@duplicate', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/test', TemplateController::class . '@sendTest', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/delete', TemplateController::class . '@destroy', [
+            RequirePermission::class . ':templates.manage',
         ]);
 
         // ------------------------------------------------------ sending domains
