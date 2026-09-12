@@ -154,8 +154,8 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'provider',
                 'status'  => 'failed',
-                'message' => 'Your email provider has not yet confirmed this identity. '
-                    . 'DNS changes can take up to 72 hours to propagate; this will clear on its own.',
+                'message' => 'Your settings look right to us, but the email service has not confirmed '
+                    . 'them yet. This can take up to three days and sorts itself out — nothing for you to do.',
             ];
         }
 
@@ -212,7 +212,7 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'DKIM',
                 'status'  => 'pending',
-                'message' => 'No DKIM records have been issued yet. Refresh the records and try again.',
+                'message' => 'We have not been given your DKIM settings yet. Press "Get them again".',
             ];
 
             return 'pending';
@@ -233,7 +233,7 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'DKIM',
                 'status'  => 'verified',
-                'message' => 'All ' . count($cnames) . ' DKIM records are published correctly.',
+                'message' => 'All ' . count($cnames) . ' DKIM settings are in place. This part is done.',
             ];
 
             return 'verified';
@@ -243,9 +243,10 @@ final class SendingDomainService
             'record'  => 'DKIM',
             'status'  => 'failed',
             'message' => count($missing) === count($cnames)
-                ? 'None of the DKIM records are published yet. Add all ' . count($cnames) . ' CNAME records below.'
-                : count($missing) . ' of ' . count($cnames) . ' DKIM records are missing or wrong: '
-                    . implode(', ', $missing),
+                ? 'We cannot see any of your DKIM settings yet. Copy all ' . count($cnames)
+                    . ' CNAME lines below across to your web address provider.'
+                : count($missing) . ' of the ' . count($cnames) . ' DKIM lines are missing or have a typo. '
+                    . 'Check these ones: ' . implode(', ', $missing),
         ];
 
         return 'failed';
@@ -271,8 +272,7 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'SPF',
                 'status'  => 'failed',
-                'message' => 'No SPF record found. Publish a TXT record on ' . $domain
-                    . ' that includes ' . self::SES_SPF_INCLUDE . '.',
+                'message' => 'You have no SPF line at all. Add the TXT line below to ' . $domain . '.',
             ];
 
             return 'failed';
@@ -282,8 +282,8 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'SPF',
                 'status'  => 'failed',
-                'message' => 'This domain has ' . count($records) . ' SPF records. Only one is allowed — '
-                    . 'receivers reject multiple records outright. Merge them into a single TXT record.',
+                'message' => 'You have ' . count($records) . ' SPF lines. You are only allowed one, and '
+                    . 'having two stops both from working. Combine them into a single TXT line.',
             ];
 
             return 'failed';
@@ -295,8 +295,8 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'SPF',
                 'status'  => 'failed',
-                'message' => 'Your SPF record does not authorise your email provider. '
-                    . 'Add "include:' . self::SES_SPF_INCLUDE . '" to the existing record — do not add a second one.',
+                'message' => 'Your SPF line does not mention us yet. Add "include:' . self::SES_SPF_INCLUDE
+                    . '" to the line you already have — do not create a second one.',
             ];
 
             return 'failed';
@@ -304,13 +304,14 @@ final class SendingDomainService
 
         // A strict -all is good practice but not ours to insist on: tightening it
         // can break a customer's other mail.
-        $mechanism = str_contains($record, '-all') ? 'strict (-all)'
-            : (str_contains($record, '~all') ? 'soft fail (~all)' : 'permissive');
+        $mechanism = str_contains($record, '-all') ? 'strict'
+            : (str_contains($record, '~all') ? 'fairly strict' : 'relaxed');
 
         $findings[] = [
             'record'  => 'SPF',
             'status'  => 'verified',
-            'message' => 'SPF authorises your email provider. Policy: ' . $mechanism . '.',
+            'message' => 'Your SPF line lets us send for you. It is set to ' . $mechanism
+                . ' about anyone else who tries.',
         ];
 
         return 'verified';
@@ -332,8 +333,9 @@ final class SendingDomainService
             $findings[] = [
                 'record'  => 'DMARC',
                 'status'  => 'pending',
-                'message' => 'No DMARC record. Not required to send, but strongly recommended — '
-                    . 'start with p=none to collect reports, then tighten once you know what sends as you.',
+                'message' => 'No DMARC line. You do not need one to send, but it is worth adding — '
+                    . 'start with the gentle setting below so you just get reports, then tighten it '
+                    . 'once you can see everything that sends email as you.',
             ];
 
             return 'pending';
@@ -348,8 +350,10 @@ final class SendingDomainService
         $findings[] = [
             'record'  => 'DMARC',
             'status'  => 'verified',
-            'message' => 'DMARC is published with policy p=' . $policy . '.'
-                . ($policy === 'none' ? ' Consider moving to quarantine once your reports look clean.' : ''),
+            'message' => 'DMARC is in place, set to "' . $policy . '".'
+                . ($policy === 'none'
+                    ? ' That means reports only. Once those look clean, consider turning it up.'
+                    : ''),
         ];
 
         return 'verified';
@@ -364,7 +368,7 @@ final class SendingDomainService
 
         if ((string) $domain['status'] !== 'verified') {
             throw new ValidationException([
-                'domain' => ['Verify the domain before sending a test.'],
+                'domain' => ['Finish setting up your web address before sending a test.'],
             ]);
         }
 
@@ -456,7 +460,7 @@ final class SendingDomainService
 
         if (preg_match('/^(?=.{1,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$/', $value) !== 1) {
             throw new ValidationException([
-                'domain' => ['That does not look like a domain name. Enter something like example.com.'],
+                'domain' => ['That does not look like a web address. Try something like example.com.'],
             ]);
         }
 

@@ -148,25 +148,30 @@ return [
         'phone', 'paper', 'import', 'preference_centre', 'unsubscribe',
     ],
 
+    // What the customer sees on a badge or in a filter. Plain words: somebody
+    // running a cafe should not have to learn what a "hard bounce" is to
+    // understand why an address stopped receiving their newsletter.
     'suppression_reasons' => [
         'unsubscribe' => 'Unsubscribed',
-        'hard_bounce' => 'Hard bounce',
-        'complaint'   => 'Spam complaint',
-        'manual'      => 'Manually suppressed',
+        'hard_bounce' => 'Address does not exist',
+        'complaint'   => 'Marked as spam',
+        'manual'      => 'Added by your team',
         'legal'       => 'Legal request',
-        'invalid'     => 'Invalid address',
-        'admin_block' => 'Blocked by platform administrator',
+        'invalid'     => 'Not a real address',
+        'admin_block' => 'Blocked by support',
     ],
 
     // Soft bounces never suppress on their own; this is the escalation point.
     'soft_bounce_threshold' => 5,
 
+    // Shown to the recipient in the preference centre, so these are the plainest
+    // words of all — the person reading them is a customer, not a user.
     'preference_topics' => [
-        'all'             => 'All marketing email',
-        'promotions'      => 'Promotions and offers',
-        'newsletter'      => 'Newsletter',
-        'product_updates' => 'Product updates',
-        'events'          => 'Events',
+        'all'             => 'Everything',
+        'promotions'      => 'Special offers and discounts',
+        'newsletter'      => 'News and tips',
+        'product_updates' => 'Updates about what we do',
+        'events'          => 'Events and open days',
     ],
 
     'privacy_policy_version' => env('PRIVACY_POLICY_VERSION', '1.0'),

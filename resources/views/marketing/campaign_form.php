@@ -120,7 +120,7 @@ $value = static function (string $field, string $default = '') use ($campaign, $
         <div class="card__head"><h2>Audience</h2></div>
         <div class="card__body">
           <div class="field">
-            <label for="segment_id">Segment</label>
+            <label for="segment_id">Smart list</label>
             <select id="segment_id" name="segment_id">
               <option value="">—</option>
               <?php foreach ($segments as $segment): ?>
@@ -142,7 +142,7 @@ $value = static function (string $field, string $default = '') use ($campaign, $
                 </option>
               <?php endforeach; ?>
             </select>
-            <div class="hint">A segment wins if both are set.</div>
+            <div class="hint">A smart list wins if both are set.</div>
           </div>
         </div>
       </div>

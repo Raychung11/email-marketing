@@ -8,6 +8,12 @@ declare(strict_types=1);
  *
  * 'phase' marks items whose backend lands in a later phase; they render as
  * disabled with a "Coming in phase N" badge rather than 404-ing.
+ *
+ * Labels are written for the person who runs the business, not for someone who
+ * works in email marketing. Our customers are plumbers, dentists and restaurant
+ * owners: "Do-not-email list" tells them what it is, where "Suppression list"
+ * makes them guess. Where an industry term is genuinely useful to learn
+ * (a smart list, a campaign), the page itself explains it in one line.
  */
 
 return [
@@ -25,10 +31,10 @@ return [
             ['label' => 'Contacts',         'route' => '/contacts',          'permission' => 'contacts.view'],
             ['label' => 'Companies',        'route' => '/companies',         'permission' => 'contacts.view'],
             ['label' => 'Lists',            'route' => '/lists',             'permission' => 'contacts.view'],
-            ['label' => 'Segments',         'route' => '/segments',          'permission' => 'contacts.view'],
+            ['label' => 'Smart lists',      'route' => '/segments',          'permission' => 'contacts.view'],
             ['label' => 'Tags',             'route' => '/tags',              'permission' => 'contacts.view'],
             ['label' => 'Import',           'route' => '/contacts/import',   'permission' => 'contacts.import'],
-            ['label' => 'Suppression list', 'route' => '/suppressions',      'permission' => 'compliance.manage'],
+            ['label' => 'Do-not-email list', 'route' => '/suppressions',     'permission' => 'compliance.manage'],
         ],
     ],
     [
@@ -61,7 +67,7 @@ return [
             ['label' => 'Leads',         'route' => '/leads',          'permission' => 'leads.view',   'phase' => 5],
             ['label' => 'Lead pipeline', 'route' => '/leads/pipeline', 'permission' => 'leads.view',   'phase' => 5],
             ['label' => 'Tasks',         'route' => '/tasks',          'permission' => 'leads.view',   'phase' => 5],
-            ['label' => 'Lead recovery', 'route' => '/leads/recovery', 'permission' => 'leads.manage', 'phase' => 4],
+            ['label' => 'Win back lost leads', 'route' => '/leads/recovery', 'permission' => 'leads.manage', 'phase' => 4],
         ],
     ],
     [
@@ -81,10 +87,10 @@ return [
         'children'   => [
             ['label' => 'Overview',            'route' => '/analytics',              'permission' => 'analytics.view'],
             ['label' => 'Campaign performance', 'route' => '/analytics/campaigns',   'permission' => 'analytics.view', 'phase' => 2],
-            ['label' => 'Customer engagement', 'route' => '/analytics/engagement',   'permission' => 'analytics.view', 'phase' => 2],
+            ['label' => 'Who reads your email', 'route' => '/analytics/engagement',  'permission' => 'analytics.view', 'phase' => 2],
             ['label' => 'Conversion',          'route' => '/analytics/conversion',   'permission' => 'analytics.view', 'phase' => 5],
-            ['label' => 'Revenue attribution', 'route' => '/analytics/revenue',      'permission' => 'analytics.view', 'phase' => 5],
-            ['label' => 'Deliverability',      'route' => '/analytics/deliverability', 'permission' => 'analytics.view', 'phase' => 2],
+            ['label' => 'Sales from email',    'route' => '/analytics/revenue',      'permission' => 'analytics.view', 'phase' => 5],
+            ['label' => 'Inbox delivery',      'route' => '/analytics/deliverability', 'permission' => 'analytics.view', 'phase' => 2],
         ],
     ],
     [
@@ -94,7 +100,7 @@ return [
         'children'   => [
             ['label' => 'AI Assistant',      'route' => '/ai/assistant',       'permission' => 'ai.use', 'phase' => 3],
             ['label' => 'Recommendations',   'route' => '/ai/recommendations', 'permission' => 'ai.use', 'phase' => 3],
-            ['label' => 'Customer segments', 'route' => '/ai/segments',        'permission' => 'ai.use', 'phase' => 3],
+            ['label' => 'Customer groups',   'route' => '/ai/segments',        'permission' => 'ai.use', 'phase' => 3],
             ['label' => 'Campaign insights', 'route' => '/ai/insights',        'permission' => 'ai.use', 'phase' => 3],
         ],
     ],
@@ -106,7 +112,7 @@ return [
         'phase'      => 6,
     ],
     [
-        'label'      => 'Compliance',
+        'label'      => 'Email rules',
         'icon'       => 'shield',
         'route'      => '/compliance',
         'permission' => 'compliance.manage',
@@ -124,7 +130,7 @@ return [
         'children'   => [
             ['label' => 'General',        'route' => '/settings',                'permission' => 'settings.manage'],
             ['label' => 'Brand profile',  'route' => '/settings/brand',          'permission' => 'settings.manage'],
-            ['label' => 'Sending domains', 'route' => '/settings/domains',       'permission' => 'settings.manage'],
+            ['label' => 'Your email address', 'route' => '/settings/domains',    'permission' => 'settings.manage'],
             ['label' => 'Custom fields',  'route' => '/settings/custom-fields',  'permission' => 'settings.manage'],
         ],
     ],

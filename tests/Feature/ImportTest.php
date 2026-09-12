@@ -84,7 +84,7 @@ final class ImportTest extends TestCase
             static fn () => $imports->run($batchId)
         );
 
-        $this->assertContainsString('declare how these contacts were obtained', implode(' ', $exception->firstErrors()));
+        $this->assertContainsString('how you got these contacts', implode(' ', $exception->firstErrors()));
     }
 
     public function testPhoneConsentRequiresAnEvidenceReference(): void

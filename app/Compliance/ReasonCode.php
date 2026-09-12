@@ -109,58 +109,71 @@ final class ReasonCode
         };
     }
 
-    /** Human-readable explanation for the UI. Never shown as the stored value. */
+    /**
+     * The explanation a customer reads. Never the stored value.
+     *
+     * Written for someone who runs a plumbing firm or a dental practice, not for
+     * someone who works in email marketing. Each one says what happened and, where
+     * there is one, what they can do about it — because the alternative is a
+     * support ticket asking what "consent basis" means.
+     */
     public static function describe(string $code): string
     {
         return match ($code) {
-            self::ALLOWED                 => 'Eligible to receive marketing email.',
-            self::INVALID_EMAIL           => 'The email address is not valid.',
-            self::MISSING_EMAIL           => 'No email address is recorded for this contact.',
-            self::SUPPRESSED_UNSUBSCRIBE  => 'This address unsubscribed and is on the suppression list.',
-            self::SUPPRESSED_HARD_BOUNCE  => 'This address permanently bounced and is suppressed.',
-            self::SUPPRESSED_COMPLAINT    => 'This address reported a previous message as spam and is suppressed.',
-            self::SUPPRESSED_MANUAL       => 'This address was manually suppressed.',
-            self::SUPPRESSED_LEGAL        => 'This address is suppressed following a legal request.',
-            self::SUPPRESSED_INVALID      => 'This address was rejected as invalid and is suppressed.',
-            self::SUPPRESSED_ADMIN_BLOCK  => 'This address was blocked by a platform administrator.',
-            self::CONSENT_WITHDRAWN       => 'Marketing consent was withdrawn.',
-            self::CONSENT_DENIED          => 'Marketing consent was explicitly declined.',
-            self::CONSENT_UNKNOWN         => 'Marketing consent has not been established for this contact.',
-            self::CONSENT_EXPIRED         => 'The recorded consent has expired.',
+            self::ALLOWED                 => 'This person can receive marketing email from you.',
+            self::INVALID_EMAIL           => 'That is not a working email address.',
+            self::MISSING_EMAIL           => 'This contact has no email address saved.',
+            self::SUPPRESSED_UNSUBSCRIBE  => 'They unsubscribed, so they are on your do-not-email list.',
+            self::SUPPRESSED_HARD_BOUNCE  => 'This address does not exist — mail to it bounced back for good.',
+            self::SUPPRESSED_COMPLAINT    => 'They marked one of your emails as spam, so we stopped emailing them.',
+            self::SUPPRESSED_MANUAL       => 'Somebody on your team added this address to the do-not-email list.',
+            self::SUPPRESSED_LEGAL        => 'This address is on the do-not-email list following a legal request.',
+            self::SUPPRESSED_INVALID      => 'This address was rejected as not real, so we stopped emailing it.',
+            self::SUPPRESSED_ADMIN_BLOCK  => 'Support has blocked this address.',
+            self::CONSENT_WITHDRAWN       => 'They told you to stop sending marketing email.',
+            self::CONSENT_DENIED          => 'They were asked and said no to marketing email.',
+            self::CONSENT_UNKNOWN         => 'You have no record of this person agreeing to hear from you.',
+            self::CONSENT_EXPIRED         => 'Their permission is now too old to rely on.',
             self::CONSENT_TYPE_NOT_ACCEPTABLE
-                => 'The recorded consent basis is not acceptable for marketing email in this jurisdiction.',
-            self::CONSENT_TOPIC_WITHDRAWN => 'The contact opted out of this topic.',
+                => 'The way you got this person\'s permission is not enough for marketing email in their country.',
+            self::CONSENT_TOPIC_WITHDRAWN => 'They asked to stop hearing about this particular topic.',
             self::RELATIONSHIP_TOO_OLD
-                => 'The existing customer relationship is older than the configured limit, so it no longer supports marketing consent.',
+                => 'They were a customer, but too long ago to count as agreeing to marketing email now.',
             self::AU_CONSENT_UNKNOWN
-                => 'Marketing consent has not been established for this Australian contact.',
-            self::US_OPTED_OUT            => 'This contact opted out of marketing email.',
-            self::ORG_SENDING_PAUSED      => 'Sending is currently paused for this organisation.',
-            self::ORG_SUSPENDED           => 'This organisation is suspended.',
-            self::ORG_DAILY_LIMIT_REACHED => 'The daily sending limit for this organisation has been reached.',
-            self::NO_SENDER_IDENTITY      => 'No sender name and address are configured.',
-            self::SENDER_DOMAIN_UNVERIFIED => 'The sending domain is not verified.',
-            self::NO_SUBJECT              => 'The campaign has no subject line.',
-            self::NO_CONTENT              => 'The campaign has no content.',
-            self::NO_UNSUBSCRIBE          => 'The content does not contain an unsubscribe link.',
-            self::NO_POSTAL_ADDRESS       => 'No physical postal address is configured for the organisation.',
-            self::NO_BUSINESS_IDENTITY    => 'No business identity (name and contact details) is configured.',
-            self::NO_AUDIENCE             => 'No audience has been selected.',
-            self::NO_ELIGIBLE_RECIPIENTS  => 'No recipients are eligible to receive this campaign.',
-            self::DECEPTIVE_SUBJECT       => 'The subject line may be misleading about the content of the message.',
+                => 'This contact is in Australia and you have no record of them agreeing to hear from you. '
+                    . 'Australian law needs that before you can send marketing email.',
+            self::US_OPTED_OUT            => 'They asked to stop receiving marketing email.',
+            self::ORG_SENDING_PAUSED      => 'Sending is paused for your account right now.',
+            self::ORG_SUSPENDED           => 'Your account is suspended, so nothing can be sent.',
+            self::ORG_DAILY_LIMIT_REACHED => 'You have hit your daily sending limit. It resets tomorrow.',
+            self::NO_SENDER_IDENTITY      => 'You have not set a name and address for your email to come from.',
+            self::SENDER_DOMAIN_UNVERIFIED
+                => 'Your email address has not been set up yet, so mail would land in spam. '
+                    . 'Finish the set-up under Settings.',
+            self::NO_SUBJECT              => 'This campaign has no subject line.',
+            self::NO_CONTENT              => 'This campaign is empty — there is nothing to send.',
+            self::NO_UNSUBSCRIBE          => 'There is no unsubscribe link in the email. Every marketing email needs one.',
+            self::NO_POSTAL_ADDRESS
+                => 'Your business postal address is missing. The law requires it in every marketing email, '
+                    . 'and we print it in the footer for you once you add it.',
+            self::NO_BUSINESS_IDENTITY    => 'Your business name and contact details are missing.',
+            self::NO_AUDIENCE             => 'You have not chosen who this campaign goes to.',
+            self::NO_ELIGIBLE_RECIPIENTS  => 'Nobody in this audience can be emailed right now.',
+            self::DECEPTIVE_SUBJECT       => 'This subject line may mislead people about what is inside the email.',
             self::MARKETING_AS_TRANSACTIONAL
-                => 'Marketing content cannot be sent through the transactional path.',
+                => 'Promotional content cannot be sent as a receipt or a notification.',
             self::IMPORT_PURCHASED_LIST_BLOCKED
-                => 'Purchased marketing lists cannot be imported: consent cannot be demonstrated for these contacts.',
+                => 'Bought lists cannot be uploaded: these people never agreed to hear from you, '
+                    . 'and emailing them would get your address blocked.',
             self::IMPORT_SCRAPED_LIST_BLOCKED
-                => 'Scraped or harvested contacts cannot be imported.',
+                => 'Addresses collected from websites cannot be uploaded.',
             self::IMPORT_CONSENT_NOT_DECLARED
-                => 'You must declare how these contacts were obtained before importing.',
+                => 'Tell us how you got these contacts before you upload them.',
             self::IMPORT_REFERENCE_REQUIRED
-                => 'A reference to the consent evidence is required for this consent source.',
+                => 'For this way of collecting contacts we need a note of where the proof is kept.',
             self::IMPORT_ROW_LIMIT_EXCEEDED
-                => 'This import exceeds the row limit for your account trust level.',
-            default => 'Sending is not permitted (' . $code . ').',
+                => 'This file has more contacts than your account can upload at once.',
+            default => 'This email cannot be sent (' . $code . ').',
         };
     }
 }

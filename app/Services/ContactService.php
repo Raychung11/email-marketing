@@ -58,7 +58,7 @@ final class ContactService
 
         if ($existing !== null) {
             throw new ValidationException([
-                'email' => ['A contact with this email address already exists in this organisation.'],
+                'email' => ['You already have a contact with this email address.'],
             ]);
         }
 

@@ -131,7 +131,7 @@ final class SendingDomainTest extends TestCase
 
         $dkimFinding = $this->finding($result['findings'], 'DKIM');
 
-        $this->assertContainsString('2 of 3', $dkimFinding, 'The message says how many are missing');
+        $this->assertContainsString('2 of the 3', $dkimFinding, 'The message says how many are missing');
         $this->assertContainsString($cnames[1]['name'], $dkimFinding, 'And names them');
     }
 
@@ -144,7 +144,7 @@ final class SendingDomainTest extends TestCase
         $result = $this->service()->verify($id);
 
         $this->assertSame('failed', $result['dkim']);
-        $this->assertContainsString('None of the DKIM records', $this->finding($result['findings'], 'DKIM'));
+        $this->assertContainsString('cannot see any of your DKIM settings', $this->finding($result['findings'], 'DKIM'));
     }
 
     public function testTwoSpfRecordsAreAHardFailure(): void
@@ -162,8 +162,8 @@ final class SendingDomainTest extends TestCase
         $result = $this->service()->verify($id);
 
         $this->assertSame('failed', $result['spf']);
-        $this->assertContainsString('2 SPF records', $this->finding($result['findings'], 'SPF'));
-        $this->assertContainsString('Merge them', $this->finding($result['findings'], 'SPF'));
+        $this->assertContainsString('You have 2 SPF lines', $this->finding($result['findings'], 'SPF'));
+        $this->assertContainsString('Combine them', $this->finding($result['findings'], 'SPF'));
 
         // But DKIM is fine, so the domain can still send — SPF is not the gate.
         $this->assertSame('verified', $result['dkim']);
@@ -183,8 +183,8 @@ final class SendingDomainTest extends TestCase
         $result = $this->service()->verify($id);
 
         $this->assertSame('failed', $result['spf']);
-        $this->assertContainsString('does not authorise', $this->finding($result['findings'], 'SPF'));
-        $this->assertContainsString('do not add a second one', $this->finding($result['findings'], 'SPF'));
+        $this->assertContainsString('does not mention us', $this->finding($result['findings'], 'SPF'));
+        $this->assertContainsString('do not create a second one', $this->finding($result['findings'], 'SPF'));
     }
 
     public function testSpfPolicyStrengthIsReportedNotEnforced(): void
@@ -202,7 +202,7 @@ final class SendingDomainTest extends TestCase
         $result = $this->service()->verify($id);
 
         $this->assertSame('verified', $result['spf']);
-        $this->assertContainsString('Policy: permissive', $this->finding($result['findings'], 'SPF'));
+        $this->assertContainsString('relaxed', $this->finding($result['findings'], 'SPF'));
     }
 
     public function testAMissingDmarcNeverBlocks(): void
@@ -218,7 +218,7 @@ final class SendingDomainTest extends TestCase
 
         $this->assertSame('pending', $result['dmarc']);
         $this->assertSame('verified', $result['status'], 'DMARC is advisory, never a gate');
-        $this->assertContainsString('strongly recommended', $this->finding($result['findings'], 'DMARC'));
+        $this->assertContainsString('worth adding', $this->finding($result['findings'], 'DMARC'));
     }
 
     public function testDmarcPolicyIsReported(): void
@@ -232,7 +232,7 @@ final class SendingDomainTest extends TestCase
 
         $result = $this->service()->verify($id);
 
-        $this->assertContainsString('p=quarantine', $this->finding($result['findings'], 'DMARC'));
+        $this->assertContainsString('"quarantine"', $this->finding($result['findings'], 'DMARC'));
     }
 
     public function testOnlyAVerifiedDomainCanBeSentFrom(): void

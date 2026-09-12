@@ -109,7 +109,7 @@ final class TemplateService
 
         if ($this->templates->isInUse($id)) {
             throw new ValidationException([
-                'template' => ['This template is used by a campaign. Delete or detach the campaign first.'],
+                'template' => ['A campaign is using this template. Change or delete that campaign first.'],
             ]);
         }
 
@@ -233,7 +233,7 @@ final class TemplateService
         }
 
         if ($normalised === []) {
-            throw new ValidationException(['blocks' => ['A template needs at least one block.']]);
+            throw new ValidationException(['blocks' => ['Add something to the email before saving it.']]);
         }
 
         return $normalised;

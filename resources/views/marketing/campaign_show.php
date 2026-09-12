@@ -53,7 +53,7 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
     <?php if ($status === 'draft'): ?>
       <?php if ($blocking !== []): ?>
         <div class="alert alert--danger" style="margin-bottom:12px">
-          <strong>This campaign cannot be sent yet</strong>
+          <strong>Not ready to send yet</strong>
           <ul>
             <?php foreach ($blocking as $finding): ?>
               <li><?= e((string) $finding['message']) ?> <span class="mono tiny">(<?= e((string) $finding['code']) ?>)</span></li>
@@ -62,8 +62,9 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
         </div>
       <?php elseif ($validated): ?>
         <div class="alert alert--success" style="margin-bottom:12px">
-          <strong>Validation passed</strong>
-          Sender, domain, content, unsubscribe, postal address and audience all check out.
+          <strong>All checks passed</strong>
+          Who it is from, your email set-up, the wording, the unsubscribe link, your postal address
+          and who it goes to — all fine.
         </div>
       <?php endif; ?>
 
@@ -76,7 +77,7 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
       <div class="flex wrap">
         <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/validate">
           <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-          <button class="btn" type="submit">Run validation</button>
+          <button class="btn" type="submit">Check it over</button>
         </form>
         <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/submit">
           <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
@@ -87,14 +88,14 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
     <?php elseif ($status === 'pending_review'): ?>
       <?php if ($isAuthor): ?>
         <div class="alert alert--info" style="margin-bottom:12px">
-          <strong>Waiting for a colleague to review this</strong>
-          You wrote this campaign, so you cannot approve it yourself. That separation is the whole
-          point of the review step — ask someone with approval permission to take a look.
+          <strong>Waiting for someone else to check it</strong>
+          You wrote this one, so you cannot sign it off yourself — a second pair of eyes is the
+          whole point. Ask a colleague who is allowed to approve to have a look.
         </div>
       <?php elseif ($canApprove): ?>
         <div class="alert alert--info" style="margin-bottom:12px">
-          <strong>This campaign is waiting for your review</strong>
-          Check the audience, the subject line and the content below before approving.
+          <strong>Someone has asked you to check this</strong>
+          Have a read of who it goes to, the subject line and the wording before you sign it off.
         </div>
         <div class="flex wrap">
           <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/approve">
@@ -108,13 +109,14 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
           </form>
         </div>
       <?php else: ?>
-        <p class="mb-0 muted">Awaiting review by someone with approval permission.</p>
+        <p class="mb-0 muted">Waiting for someone who is allowed to sign it off.</p>
       <?php endif; ?>
 
     <?php elseif ($status === 'approved'): ?>
       <div class="alert alert--success" style="margin-bottom:12px">
-        <strong>Approved<?= !empty($campaign['approved_at']) ? ' on ' . e(substr((string) $campaign['approved_at'], 0, 16)) . ' UTC' : '' ?></strong>
-        Schedule it, or send now. Editing it from here would invalidate the approval.
+        <strong>Signed off<?= !empty($campaign['approved_at']) ? ' on ' . e(substr((string) $campaign['approved_at'], 0, 16)) . ' UTC' : '' ?></strong>
+        Pick a time, or send it straight away. If you change the wording now it has to be checked
+        again — otherwise the sign-off would not mean anything.
       </div>
       <div class="flex wrap">
         <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/schedule" class="flex">
@@ -124,7 +126,7 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
           <span class="tiny muted">times in <?= e($timezone) ?></span>
         </form>
         <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/send"
-              data-confirm="Send this campaign to <?= number_format($audience['eligible']) ?> recipients?">
+              data-confirm="Send this to <?= number_format($audience['eligible']) ?> people? You cannot take it back once it goes.">
           <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
           <button class="btn btn--primary" type="submit">Send now</button>
         </form>
@@ -145,17 +147,17 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
 
     <?php elseif ($status === 'sending'): ?>
       <div class="alert alert--info" style="margin-bottom:12px">
-        <strong>Sending</strong>
+        <strong>Sending now</strong>
         <?php // Read live from the snapshot: the campaign counters are a rollup
               // refreshed when the send finishes, so mid-flight they lag. ?>
         <?= number_format((int) ($delivery['send_status']['sent'] ?? $campaign['sent_count'])) ?> of
         <?= number_format((int) ($delivery['eligible'] ?? $campaign['eligible_count'])) ?>
-        handed to the provider so far.
+        sent so far.
       </div>
       <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/pause"
-            data-confirm="Pause this send? Messages already with the provider cannot be recalled.">
+            data-confirm="Stop this send? Emails that have already gone out cannot be pulled back, but nothing more will be sent.">
         <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-        <button class="btn btn--danger" type="submit">Pause sending</button>
+        <button class="btn btn--danger" type="submit">Stop sending</button>
       </form>
 
     <?php elseif ($status === 'paused'): ?>
@@ -189,9 +191,9 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
       <div class="card__body" style="background:#f4f5f7">
         <?php if (trim(strip_tags((string) $campaign['html_content'])) === ''): ?>
           <div class="empty" style="padding:28px">
-            <h3>No content yet</h3>
-            <p>Apply a template or write the body.</p>
-            <a class="btn btn--primary" href="/campaigns/<?= (int) $campaign['id'] ?>/edit">Add content</a>
+            <h3>Nothing written yet</h3>
+            <p>Start from a template, or write it yourself.</p>
+            <a class="btn btn--primary" href="/campaigns/<?= (int) $campaign['id'] ?>/edit">Write the email</a>
           </div>
         <?php else: ?>
           <iframe src="/campaigns/<?= (int) $campaign['id'] ?>/preview" title="Campaign preview" sandbox=""
@@ -257,43 +259,43 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
 
         <?php if ($delivery !== null): ?>
           <p class="tiny muted mt-0">
-            Taken from the recipient snapshot recorded when this campaign started,
-            not from re-running the segment today.
+            This is the list we saved the moment this campaign started sending — the real answer to
+            "who got it", not who would match your smart list today.
           </p>
         <?php endif; ?>
 
         <div class="stat" style="border:0;box-shadow:none;padding:0">
-          <div class="stat__label"><?= $delivery === null ? 'Will receive this' : 'Eligible at send time' ?></div>
+          <div class="stat__label"><?= $delivery === null ? 'Will get this' : 'Could be emailed at the time' ?></div>
           <div class="stat__value"><?= number_format($audience['eligible']) ?></div>
           <div class="stat__meta">of <?= number_format($audience['total']) ?> matching contacts</div>
         </div>
 
         <?php if ($audience['total'] > $audience['eligible']): ?>
           <hr class="sep">
-          <p class="tiny muted mt-0">Excluded, and why:</p>
+          <p class="tiny muted mt-0">Who we left out, and why:</p>
           <?php if ($audience['suppressed'] > 0): ?>
-            <div class="flex-between small"><span>Suppressed</span><strong><?= number_format($audience['suppressed']) ?></strong></div>
+            <div class="flex-between small"><span>On your do-not-email list</span><strong><?= number_format($audience['suppressed']) ?></strong></div>
           <?php endif; ?>
           <?php if ($audience['no_consent'] > 0): ?>
-            <div class="flex-between small"><span>No consent basis</span><strong><?= number_format($audience['no_consent']) ?></strong></div>
+            <div class="flex-between small"><span>Never agreed to hear from you</span><strong><?= number_format($audience['no_consent']) ?></strong></div>
           <?php endif; ?>
           <?php if ($audience['invalid'] > 0): ?>
-            <div class="flex-between small"><span>Invalid address</span><strong><?= number_format($audience['invalid']) ?></strong></div>
+            <div class="flex-between small"><span>Address is not valid</span><strong><?= number_format($audience['invalid']) ?></strong></div>
           <?php endif; ?>
           <?php if ($audience['blocked'] > 0): ?>
-            <div class="flex-between small"><span>Blocked</span><strong><?= number_format($audience['blocked']) ?></strong></div>
+            <div class="flex-between small"><span>Blocked for another reason</span><strong><?= number_format($audience['blocked']) ?></strong></div>
           <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($delivery !== null): ?>
           <hr class="sep">
-          <p class="tiny muted mt-0">Delivery progress:</p>
+          <p class="tiny muted mt-0">How the send is going:</p>
           <?php foreach ([
-              'sent'    => 'Handed to the provider',
-              'queued'  => 'Queued',
-              'pending' => 'Still to queue',
-              'skipped' => 'Skipped at send time',
-              'failed'  => 'Rejected by the provider',
+              'sent'    => 'Sent',
+              'queued'  => 'Being sent now',
+              'pending' => 'Still to go',
+              'skipped' => 'Skipped — something changed',
+              'failed'  => 'Could not be delivered',
           ] as $key => $label): ?>
             <?php if (($delivery['send_status'][$key] ?? 0) > 0): ?>
               <div class="flex-between small">
@@ -305,7 +307,7 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
 
           <?php if ($delivery['skip_reasons'] !== []): ?>
             <hr class="sep">
-            <p class="tiny muted mt-0">Reasons recipients were held back:</p>
+            <p class="tiny muted mt-0">Why we did not email some people:</p>
             <?php foreach ($delivery['skip_reasons'] as $code => $count): ?>
               <div class="flex-between tiny">
                 <span title="<?= e($code) ?>"><?= e(App\Compliance\ReasonCode::describe((string) $code)) ?></span>
@@ -318,7 +320,7 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
     </div>
 
     <div class="card">
-      <div class="card__head"><h2>Sender</h2></div>
+      <div class="card__head"><h2>Who it comes from</h2></div>
       <div class="card__body small">
         <div class="flex-between"><span>From</span><strong><?= e((string) ($campaign['from_name'] ?? '—')) ?></strong></div>
         <div class="tiny muted" style="word-break:break-all"><?= e((string) ($campaign['from_email'] ?? '')) ?></div>
@@ -331,10 +333,10 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
 
     <?php if (!in_array($status, ['completed', 'cancelled'], true)): ?>
       <div class="card">
-        <div class="card__head"><h2>Danger zone</h2></div>
+        <div class="card__head"><h2>Delete</h2></div>
         <div class="card__body">
           <form method="post" action="/campaigns/<?= (int) $campaign['id'] ?>/delete"
-                data-confirm="Delete this campaign?">
+                data-confirm="Delete this campaign for good?">
             <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
             <button class="btn btn--danger btn--sm btn--block" type="submit">Delete campaign</button>
           </form>

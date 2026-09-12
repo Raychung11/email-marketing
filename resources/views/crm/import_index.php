@@ -103,7 +103,7 @@
 
         <p class="muted mb-0">
           Purchased and scraped lists are not imported-and-blocked — the import does not run at all.
-          Existing suppressions are never cleared by an import, so someone who unsubscribed stays
+          Uploading a file never puts someone back on your mailing list, so anyone who unsubscribed stays
           unsubscribed even if their address appears in the file again.
         </p>
       </div>

@@ -455,9 +455,9 @@ final class CampaignSendTest extends TestCase
 
         $this->assertStatus(200, $after);
         $this->assertContainsString('Who this went to', $after->body());
-        $this->assertContainsString('recipient snapshot', $after->body());
+        $this->assertContainsString('the moment this campaign started sending', $after->body());
         $this->assertContainsString(
-            'unsubscribed and is on the suppression list',
+            'on your do-not-email list',
             $after->body(),
             'The page explains why somebody was held back'
         );

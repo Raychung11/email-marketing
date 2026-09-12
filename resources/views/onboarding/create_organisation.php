@@ -11,7 +11,7 @@
 <div class="card" style="max-width:640px">
   <div class="card__body">
     <p class="mt-0 small muted">
-      An organisation is the boundary for contacts, campaigns, billing and compliance. Agencies can
+      Each business gets its own contacts, campaigns and bill, kept completely separate. Agencies can
       run several; most businesses need one.
     </p>
     <p class="mb-0">

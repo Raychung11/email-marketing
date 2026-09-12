@@ -174,7 +174,7 @@ final class CampaignService
         // with the provider and the record is needed to explain them.
         if (in_array((string) $campaign['status'], ['sending'], true)) {
             throw new ValidationException([
-                'campaign' => ['This campaign is sending. Pause it first.'],
+                'campaign' => ['This campaign is going out right now. Stop it first.'],
             ]);
         }
 
@@ -370,7 +370,7 @@ final class CampaignService
         $moved = $this->campaigns->transition($id, self::EDITABLE_STATES, 'pending_review');
 
         if ($moved === 0) {
-            throw new ValidationException(['campaign' => ['This campaign is no longer a draft.']]);
+            throw new ValidationException(['campaign' => ['This campaign has moved on from a draft.']]);
         }
 
         $this->audit->log('campaign_submitted_for_review', 'campaign', $id);
@@ -382,7 +382,7 @@ final class CampaignService
 
         if ((string) $campaign['status'] !== 'pending_review') {
             throw new ValidationException([
-                'campaign' => ['Only a campaign awaiting review can be approved.'],
+                'campaign' => ['Only a campaign that has been sent for checking can be signed off.'],
             ]);
         }
 
@@ -396,8 +396,8 @@ final class CampaignService
 
         if ($authorId > 0 && $authorId === $approverId && !$this->auth->isSuperAdmin()) {
             throw HttpException::forbidden(
-                'You created this campaign, so you cannot approve it. Ask a colleague with approval '
-                . 'permission to review it — that is the point of the review step.'
+                'You wrote this campaign, so you cannot sign it off yourself. Ask a colleague to check it — '
+                . 'a second pair of eyes is the whole point.'
             );
         }
 
@@ -420,7 +420,7 @@ final class CampaignService
         ]);
 
         if ($moved === 0) {
-            throw new ValidationException(['campaign' => ['Somebody else has already actioned this campaign.']]);
+            throw new ValidationException(['campaign' => ['Someone on your team got there first — refresh the page to see where it is up to.']]);
         }
 
         $this->audit->log('campaign_approved', 'campaign', $id, null, [
@@ -434,7 +434,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if ((string) $campaign['status'] !== 'pending_review') {
-            throw new ValidationException(['campaign' => ['This campaign is not awaiting review.']]);
+            throw new ValidationException(['campaign' => ['Nobody has been asked to check this campaign.']]);
         }
 
         $this->auth->authorise('campaigns.approve');
@@ -459,7 +459,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if ((string) $campaign['status'] !== 'approved') {
-            throw new ValidationException(['campaign' => ['Only an approved campaign can be scheduled.']]);
+            throw new ValidationException(['campaign' => ['Someone needs to sign this off before you can pick a send time.']]);
         }
 
         $this->auth->authorise('campaigns.send');
@@ -469,7 +469,7 @@ final class CampaignService
 
         if ($utc <= $this->clock->nowString()) {
             throw new ValidationException([
-                'scheduled_at' => ['Choose a time in the future, or send now instead.'],
+                'scheduled_at' => ['That time has already passed. Pick a later one, or send it straight away.'],
             ]);
         }
 
@@ -479,7 +479,7 @@ final class CampaignService
         ]);
 
         if ($moved === 0) {
-            throw new ValidationException(['campaign' => ['This campaign is no longer approved.']]);
+            throw new ValidationException(['campaign' => ['This campaign is no longer signed off.']]);
         }
 
         $this->audit->log('campaign_scheduled', 'campaign', $id, null, [
@@ -500,7 +500,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if ((string) $campaign['status'] !== 'approved') {
-            throw new ValidationException(['campaign' => ['Only an approved campaign can be sent.']]);
+            throw new ValidationException(['campaign' => ['Someone needs to sign this off before you can send it.']]);
         }
 
         $this->auth->authorise('campaigns.send');
@@ -511,7 +511,7 @@ final class CampaignService
         ]);
 
         if ($moved === 0) {
-            throw new ValidationException(['campaign' => ['This campaign is no longer approved.']]);
+            throw new ValidationException(['campaign' => ['This campaign is no longer signed off.']]);
         }
 
         $this->audit->log('campaign_send_requested', 'campaign', $id, null, ['mode' => 'immediate']);
@@ -544,7 +544,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if (!in_array((string) $campaign['status'], ['sending', 'scheduled'], true)) {
-            throw new ValidationException(['campaign' => ['This campaign is not sending.']]);
+            throw new ValidationException(['campaign' => ['This campaign is not going out at the moment.']]);
         }
 
         $this->auth->authorise('campaigns.send');
@@ -559,7 +559,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if ((string) $campaign['status'] !== 'paused') {
-            throw new ValidationException(['campaign' => ['This campaign is not paused.']]);
+            throw new ValidationException(['campaign' => ['This campaign is not stopped.']]);
         }
 
         $this->auth->authorise('campaigns.send');
@@ -587,7 +587,7 @@ final class CampaignService
         $campaign = $this->campaigns->findOrFailDecoded($id);
 
         if (in_array((string) $campaign['status'], ['completed', 'cancelled'], true)) {
-            throw new ValidationException(['campaign' => ['This campaign has already finished.']]);
+            throw new ValidationException(['campaign' => ['This campaign is already done.']]);
         }
 
         $this->auth->authorise('campaigns.send');
@@ -703,7 +703,7 @@ final class CampaignService
             ];
 
             if (!in_array((string) $payload['campaign_type'], $allowed, true)) {
-                throw new ValidationException(['campaign_type' => ['Choose a valid campaign type.']]);
+                throw new ValidationException(['campaign_type' => ['Pick one of the campaign types from the list.']]);
             }
         }
 

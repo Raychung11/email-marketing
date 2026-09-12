@@ -131,7 +131,7 @@ final class CampaignWorkflowTest extends TestCase
         );
 
         $this->assertSame(403, $exception->statusCode());
-        $this->assertContainsString('cannot approve it', $exception->getMessage());
+        $this->assertContainsString('cannot sign it off yourself', $exception->getMessage());
         $this->assertSame('pending_review', (string) $this->service()->find($id)['status']);
     }
 

@@ -30,7 +30,7 @@ final class ContactTest extends TestCase
             static fn () => $contacts->create(['email' => 'one@example.com'])
         );
 
-        $this->assertContainsString('already exists', implode(' ', $exception->firstErrors()));
+        $this->assertContainsString('already have a contact', implode(' ', $exception->firstErrors()));
     }
 
     public function testEmailComparisonForDeduplicationIsCaseInsensitive(): void
