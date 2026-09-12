@@ -202,52 +202,77 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
       </div>
     </div>
 
-    <?php if (in_array($status, ['sending', 'completed', 'paused'], true)): ?>
+    <?php if ($report !== null && in_array($status, ['sending', 'completed', 'paused'], true)): ?>
+      <?php $funnel = $report['funnel']; ?>
       <div class="card">
-        <div class="card__head"><h2>Results</h2></div>
+        <div class="card__head"><h2>What happened</h2></div>
         <div class="card__body">
+          <?php // Read live from email_messages, not the rollup counters, which
+                // are only recomputed when the send finishes. ?>
           <div class="stats">
             <div class="stat">
               <div class="stat__label">Sent</div>
-              <div class="stat__value"><?= number_format((int) $campaign['sent_count']) ?></div>
+              <div class="stat__value"><?= number_format((int) $funnel['sent']) ?></div>
             </div>
             <div class="stat">
-              <div class="stat__label">Delivered</div>
-              <div class="stat__value">
-                <?= (int) $campaign['sent_count'] > 0
-                    ? round((int) $campaign['delivered_count'] / (int) $campaign['sent_count'] * 100, 1) . '%'
-                    : '—' ?>
-              </div>
+              <div class="stat__label">Arrived</div>
+              <div class="stat__value"><?= $funnel['delivery_rate'] ?>%</div>
+              <div class="stat__meta"><?= number_format((int) $funnel['delivered']) ?> emails</div>
             </div>
             <div class="stat stat--accent">
-              <div class="stat__label">Click rate</div>
-              <div class="stat__value">
-                <?= (int) $campaign['delivered_count'] > 0
-                    ? round((int) $campaign['unique_click_count'] / (int) $campaign['delivered_count'] * 100, 2) . '%'
-                    : '—' ?>
-              </div>
-              <div class="stat__meta"><?= number_format((int) $campaign['unique_click_count']) ?> people</div>
+              <div class="stat__label">Clicked something</div>
+              <div class="stat__value"><?= $funnel['click_rate'] ?>%</div>
+              <div class="stat__meta"><?= number_format((int) $funnel['clicked']) ?> people</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Open rate</div>
-              <div class="stat__value muted">
-                <?= (int) $campaign['delivered_count'] > 0
-                    ? round((int) $campaign['unique_open_count'] / (int) $campaign['delivered_count'] * 100, 1) . '%'
-                    : '—' ?>
-              </div>
-              <div class="stat__meta">indicative only</div>
+              <div class="stat__label">Opened</div>
+              <div class="stat__value muted"><?= $funnel['open_rate'] ?>%</div>
+              <div class="stat__meta">rough guide only</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Bounced</div>
-              <div class="stat__value"><?= number_format((int) $campaign['bounce_count']) ?></div>
+              <div class="stat__label">Address did not exist</div>
+              <div class="stat__value"><?= number_format((int) $funnel['bounced']) ?></div>
             </div>
             <div class="stat">
-              <div class="stat__label">Complaints</div>
-              <div class="stat__value"><?= number_format((int) $campaign['complaint_count']) ?></div>
+              <div class="stat__label">Marked as spam</div>
+              <div class="stat__value"><?= number_format((int) $funnel['complained']) ?></div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Unsubscribed</div>
+              <div class="stat__value"><?= number_format((int) $funnel['unsubscribed']) ?></div>
             </div>
           </div>
         </div>
       </div>
+
+      <?php if ($report['links'] !== []): ?>
+        <div class="card">
+          <div class="card__head"><h2>What people pressed</h2></div>
+          <div class="card__body card__body--tight">
+            <p class="small muted" style="padding:12px 14px 0;margin:0">
+              The most useful thing on this page. If nobody pressed your main button and everybody
+              pressed the phone number, that tells you what to change next time.
+            </p>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Link</th><th class="num">People</th><th class="num">Share</th></tr></thead>
+                <tbody>
+                  <?php foreach ($report['links'] as $link): ?>
+                    <tr>
+                      <td>
+                        <strong><?= e((string) $link['label']) ?></strong>
+                        <div class="tiny muted" style="word-break:break-all"><?= e((string) $link['url']) ?></div>
+                      </td>
+                      <td class="num"><strong><?= number_format((int) $link['people']) ?></strong></td>
+                      <td class="num muted"><?= $link['share'] ?>%</td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
     <?php endif; ?>
   </div>
 

@@ -14,6 +14,7 @@ use App\Mail\EmailRenderer;
 use App\Repositories\ListRepository;
 use App\Repositories\SegmentRepository;
 use App\Repositories\TemplateRepository;
+use App\Services\AnalyticsService;
 use App\Services\AuthManager;
 use App\Services\CampaignService;
 use App\Support\TenantContext;
@@ -30,6 +31,7 @@ final class CampaignController extends Controller
         private readonly TemplateRepository $templates,
         private readonly EmailRenderer $renderer,
         private readonly AuthManager $auth,
+        private readonly AnalyticsService $analytics,
         private readonly TenantContext $tenant,
     ) {
         parent::__construct($view, $session, $config);
@@ -100,6 +102,8 @@ final class CampaignController extends Controller
             'campaign' => $campaign,
             'audience' => $delivery ?? $this->campaigns->audience($id),
             'delivery' => $delivery,
+            // Only worth querying once something has actually been sent.
+            'report'   => $delivery === null ? null : $this->analytics->campaignReport($id),
             'findings' => $campaign['validation_findings'],
             'statuses' => $this->statuses(),
             'types'    => $this->types(),

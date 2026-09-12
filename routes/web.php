@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\Auth\LoginController;
 use App\Controllers\Auth\PasswordController;
 use App\Controllers\Auth\RegisterController;
+use App\Controllers\AnalyticsController;
 use App\Controllers\ComplianceController;
 use App\Controllers\Crm\CompanyController;
 use App\Controllers\Crm\ContactController;
@@ -104,7 +105,14 @@ return static function (Router $router): void {
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
-        $router->get('/analytics', DashboardController::class . '@analytics', [
+        // ---------------------------------------------------------- analytics
+        $router->get('/analytics', AnalyticsController::class . '@index', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/campaigns', AnalyticsController::class . '@campaigns', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/deliverability', AnalyticsController::class . '@deliverability', [
             RequirePermission::class . ':analytics.view',
         ]);
 

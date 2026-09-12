@@ -30,7 +30,7 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Onboarding/setup wizard                   | DONE |
 | Test suite (tenancy, RBAC, compliance, security) | DONE |
 
-## Phase 2 — Email
+## Phase 2 — Email  ✅ DONE
 
 | Item | Status |
 |------|--------|
@@ -48,7 +48,8 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | SNS event webhook `/webhooks/aws/ses` (signature verified, idempotent) | DONE |
 | Bounce/complaint → suppression                        | DONE |
 | Open/click tracking, link tracking, UTM builder       | DONE |
-| Deliverability dashboard + reputation alerts          | PARTIAL — scheduler raises `reputation_alerts`, no dashboard |
+| Deliverability dashboard + reputation alerts          | DONE |
+| Campaign reporting (funnel, top links, skip reasons)  | DONE |
 
 ## Phase 3 — AI
 

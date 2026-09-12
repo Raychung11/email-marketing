@@ -323,7 +323,42 @@ not become acceptable on the twentieth attempt. The single exception is a failed
 signature, which answers 403: that caller is not Amazon, so there is no retry
 storm to cause, and an operator reading their logs should see it plainly.
 
-## 14. Tracking and what it is worth
+## 14. Reporting
+
+Two opinions run through `AnalyticsService`, and both are defended by tests
+because both are the kind of thing that quietly decays into a vanity dashboard.
+
+**Clicks over opens.** An open means an image was requested. Apple Mail Privacy
+Protection and its equivalents request that image on the recipient's behalf
+whether or not anyone looked, so a 60% open rate can mean nothing happened.
+A click required a person, a device and an intent. Opens are still reported —
+customers expect the number and would distrust a tool that hid it — but they are
+labelled as a rough guide, greyed out in tables, and nothing in the product makes
+a decision on them.
+
+**A rate is useless without its denominator.** "100% click rate" from four
+recipients next to a real campaign's 3.1% invites exactly the wrong conclusion,
+so every rate travels with the count it came from, and `highlights()` refuses to
+crown a campaign that reached fewer than `analytics.minimum_meaningful_send`
+people. When there is not enough data, the answer is "not enough sent yet to
+tell" rather than a confident number.
+
+Engagement is measured against *delivered*, not sent: an address that bounced
+never had the chance to click. Delivery itself counts an open or a click as
+proof of arrival, because a missing delivery notification is a gap in our
+knowledge, not evidence the message failed.
+
+The deliverability view breaks results down per mailbox provider, because the
+most common shape of a deliverability problem is lopsided — Gmail quietly
+junking your mail while Outlook delivers it fine — and a single overall number
+hides it completely. Its headline is a sentence, not a percentage: somebody who
+has never heard of a complaint rate needs to be told what to do about it.
+
+All of the reporting SQL runs on MySQL and SQLite alike (`SUBSTR` + `INSTR`
+rather than `SUBSTRING_INDEX`), so the test suite exercises the same queries
+production runs.
+
+## 15. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

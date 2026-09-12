@@ -86,11 +86,11 @@ return [
         'permission' => 'analytics.view',
         'children'   => [
             ['label' => 'Overview',            'route' => '/analytics',              'permission' => 'analytics.view'],
-            ['label' => 'Campaign performance', 'route' => '/analytics/campaigns',   'permission' => 'analytics.view', 'phase' => 2],
+            ['label' => 'How campaigns did',   'route' => '/analytics/campaigns',   'permission' => 'analytics.view'],
             ['label' => 'Who reads your email', 'route' => '/analytics/engagement',  'permission' => 'analytics.view', 'phase' => 2],
             ['label' => 'Conversion',          'route' => '/analytics/conversion',   'permission' => 'analytics.view', 'phase' => 5],
             ['label' => 'Sales from email',    'route' => '/analytics/revenue',      'permission' => 'analytics.view', 'phase' => 5],
-            ['label' => 'Inbox delivery',      'route' => '/analytics/deliverability', 'permission' => 'analytics.view', 'phase' => 2],
+            ['label' => 'Inbox delivery',      'route' => '/analytics/deliverability', 'permission' => 'analytics.view'],
         ],
     ],
     [
