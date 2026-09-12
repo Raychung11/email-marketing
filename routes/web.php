@@ -18,6 +18,7 @@ use App\Controllers\HealthController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
 use App\Controllers\Public_\UnsubscribeController;
+use App\Controllers\Settings\DomainController;
 use App\Controllers\SettingsController;
 use App\Controllers\TeamController;
 use App\Core\Router;
@@ -312,6 +313,31 @@ return static function (Router $router): void {
             RequirePermission::class . ':settings.manage',
         ]);
         $router->post('/settings/custom-fields/{id}/delete', SettingsController::class . '@destroyCustomField', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+
+        // ------------------------------------------------------ sending domains
+        // Authentication setup is a settings concern, and a prerequisite for
+        // every campaign: the validator refuses an unverified from-domain.
+        $router->get('/settings/domains', DomainController::class . '@index', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains', DomainController::class . '@store', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->get('/settings/domains/{id}', DomainController::class . '@show', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/verify', DomainController::class . '@verify', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/refresh', DomainController::class . '@refresh', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/test', DomainController::class . '@sendTest', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/delete', DomainController::class . '@destroy', [
             RequirePermission::class . ':settings.manage',
         ]);
 

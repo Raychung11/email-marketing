@@ -270,6 +270,10 @@ final class Application
 
         $c->alias(\App\Mail\ChannelProviderInterface::class, \App\Mail\EmailProviderInterface::class);
 
+        // --- DNS (domain verification) --------------------------------------
+        $c->singleton(\App\Support\DnsResolver::class, static fn (): \App\Support\DnsResolver
+            => new \App\Support\SystemDnsResolver());
+
         // --- AI -------------------------------------------------------------
         $c->singleton(\App\AI\AiProviderInterface::class, static function (Container $c): \App\AI\AiProviderInterface {
             $config   = $c->make(Config::class);

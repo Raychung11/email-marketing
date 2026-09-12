@@ -156,6 +156,21 @@ if ((int) $clock->now()->format('i') % 15 === 0) {
         $tenant->clear();
     });
 
+    // Re-check domains whose DNS was still propagating, so a customer who
+    // publishes their records overnight is verified by morning.
+    $schedule('domains.recheck', 900, static function () use ($container, $logger): void {
+        /** @var App\Services\SendingDomainService $domains */
+        $domains = $container->make(App\Services\SendingDomainService::class);
+
+        $results = $domains->recheckPending(25);
+
+        foreach ($results as $result) {
+            if ($result['status'] === 'verified') {
+                $logger->info('Sending domain verified', ['domain' => $result['domain']]);
+            }
+        }
+    });
+
     // Deliverability monitoring.
     $schedule('deliverability.monitor', 900, static function () use ($connection, $clock, $container, $logger): void {
         /** @var App\Core\Config $config */

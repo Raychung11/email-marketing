@@ -8,6 +8,7 @@ use App\Core\Clock;
 use App\Core\Config;
 use App\Database\Connection;
 use App\Mail\EmailRenderer;
+use App\Repositories\SendingDomainRepository;
 use App\Support\TenantContext;
 
 /**
@@ -27,6 +28,7 @@ final class CampaignValidator
     public function __construct(
         private readonly ComplianceService $compliance,
         private readonly EmailRenderer $renderer,
+        private readonly SendingDomainRepository $domains,
         private readonly Connection $connection,
         private readonly Config $config,
         private readonly Clock $clock,
@@ -62,14 +64,9 @@ final class CampaignValidator
         } else {
             // The sending domain must be verified: unauthenticated mail does not
             // reach inboxes, and spoofing someone else's domain is worse.
-            $domain   = substr($fromEmail, strrpos($fromEmail, '@') + 1);
-            $verified = $this->connection->table('sending_domains')
-                ->where('organisation_id', '=', (int) $organisation['id'])
-                ->where('domain', '=', $domain)
-                ->where('status', '=', 'verified')
-                ->exists();
+            $domain = substr($fromEmail, strrpos($fromEmail, '@') + 1);
 
-            if (!$verified) {
+            if (!$this->domains->canSendFrom($fromEmail)) {
                 $blocking[] = $this->finding(
                     ReasonCode::SENDER_DOMAIN_UNVERIFIED,
                     'The domain ' . $domain . ' is not verified for sending. Verify it in Settings → Domains.'

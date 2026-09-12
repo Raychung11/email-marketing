@@ -90,9 +90,46 @@ final class LogEmailProvider implements EmailProviderInterface
         return new ReputationMetrics();
     }
 
+    /**
+     * Deterministic pretend DKIM tokens.
+     *
+     * The domain wizard is worth exercising in development and in tests, and it
+     * cannot be unless the provider hands back records to check. Tokens are
+     * derived from the domain so they are stable across runs.
+     *
+     * @return array<int,array{type:string,name:string,value:string,purpose:string}>
+     */
     public function dnsRecordsFor(string $domain): array
     {
-        return [];
+        $records = [];
+
+        foreach ([0, 1, 2] as $index) {
+            $token = substr(hash('sha256', $domain . ':dkim:' . $index), 0, 32);
+
+            $records[] = [
+                'type'    => 'CNAME',
+                'name'    => $token . '._domainkey.' . $domain,
+                'value'   => $token . '.dkim.example-provider.test',
+                'purpose' => 'DKIM — signs your mail cryptographically. All three records are required.',
+            ];
+        }
+
+        $records[] = [
+            'type'    => 'TXT',
+            'name'    => $domain,
+            'value'   => 'v=spf1 include:amazonses.com ~all',
+            'purpose' => 'SPF — authorises the provider to send for this domain. '
+                . 'Merge this into an existing SPF record rather than adding a second one.',
+        ];
+
+        $records[] = [
+            'type'    => 'TXT',
+            'name'    => '_dmarc.' . $domain,
+            'value'   => 'v=DMARC1; p=none; rua=mailto:dmarc@' . $domain,
+            'purpose' => 'DMARC — start at p=none to collect reports, then tighten.',
+        ];
+
+        return $records;
     }
 
     /**

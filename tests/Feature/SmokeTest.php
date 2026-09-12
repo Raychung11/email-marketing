@@ -71,6 +71,7 @@ final class SmokeTest extends TestCase
             '/team',
             '/settings',
             '/settings/brand',
+            '/settings/domains',
             '/settings/custom-fields',
             '/settings/profile',
             '/onboarding',

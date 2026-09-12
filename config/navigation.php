@@ -120,8 +120,13 @@ return [
     [
         'label'      => 'Settings',
         'icon'       => 'settings',
-        'route'      => '/settings',
         'permission' => 'settings.manage',
+        'children'   => [
+            ['label' => 'General',        'route' => '/settings',                'permission' => 'settings.manage'],
+            ['label' => 'Brand profile',  'route' => '/settings/brand',          'permission' => 'settings.manage'],
+            ['label' => 'Sending domains', 'route' => '/settings/domains',       'permission' => 'settings.manage'],
+            ['label' => 'Custom fields',  'route' => '/settings/custom-fields',  'permission' => 'settings.manage'],
+        ],
     ],
     [
         'label'      => 'Billing',
