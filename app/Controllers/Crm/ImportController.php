@@ -52,6 +52,99 @@ final class ImportController extends Controller
         ]);
     }
 
+    /**
+     * A starter CSV, built from the same field registry the importer maps
+     * against. Generated rather than stored as a file on purpose: a template
+     * kept by hand drifts from the fields the importer actually accepts, and
+     * the person who finds out is the one whose import fails.
+     *
+     * Only `email` is required. Every other column can be deleted.
+     */
+    public function template(Request $request): Response
+    {
+        $fields = array_keys($this->imports->mappableFields());
+
+        $examples = [
+            [
+                'email'           => 'sarah.mitchell@example.com',
+                'first_name'      => 'Sarah',
+                'last_name'       => 'Mitchell',
+                'phone'           => '+61 412 345 678',
+                'company'         => 'Mitchell Property Group',
+                'job_title'       => 'Owner',
+                'country'         => 'AU',
+                'state'           => 'VIC',
+                'city'            => 'Melbourne',
+                'postcode'        => '3000',
+                'customer_status' => 'customer',
+                'lifecycle_stage' => 'customer',
+                'source'          => 'Website enquiry form',
+                'notes'           => 'Bathroom renovation, June 2025',
+            ],
+            [
+                'email'           => 'james.oconnor@example.com',
+                'first_name'      => 'James',
+                'last_name'       => "O'Connor",
+                'phone'           => '+1 512 555 0147',
+                'company'         => 'Lone Star Dental',
+                'job_title'       => 'Practice Manager',
+                'country'         => 'US',
+                'state'           => 'TX',
+                'city'            => 'Austin',
+                'postcode'        => '78701',
+                'customer_status' => 'prospect',
+                'lifecycle_stage' => 'lead',
+                'source'          => 'Trade show, March 2025',
+                'notes'           => 'Asked about the annual plan',
+            ],
+            [
+                'email'           => 'priya.sharma@example.com',
+                'first_name'      => 'Priya',
+                'last_name'       => 'Sharma',
+                'phone'           => '',
+                'company'         => '',
+                'job_title'       => '',
+                'country'         => 'AU',
+                'state'           => 'NSW',
+                'city'            => 'Sydney',
+                'postcode'        => '2000',
+                'customer_status' => 'customer',
+                'lifecycle_stage' => 'customer',
+                'source'          => 'Shop counter signup sheet',
+                'notes'           => '',
+            ],
+        ];
+
+        $lines = [$this->csvRow($fields)];
+
+        foreach ($examples as $example) {
+            $lines[] = $this->csvRow(array_map(
+                static fn (string $field): string => (string) ($example[$field] ?? ''),
+                $fields
+            ));
+        }
+
+        // A BOM, so Excel opens accented names and "O'Connor" correctly instead
+        // of turning them into mojibake the moment the file is saved again.
+        $csv = "\xEF\xBB\xBF" . implode("\r\n", $lines) . "\r\n";
+
+        return Response::text($csv)
+            ->withHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->withHeader('Content-Disposition', 'attachment; filename="contact-import-template.csv"');
+    }
+
+    /** @param array<int,string> $values */
+    private function csvRow(array $values): string
+    {
+        return implode(',', array_map(static function (string $value): string {
+            // Quote anything that would otherwise break the row apart, and
+            // double any quote inside it.
+            return preg_match('/[",\r\n]/', $value) === 1
+                ? '"' . str_replace('"', '""', $value) . '"'
+                : $value;
+        }, $values));
+    }
+
     /** Step 1-2: upload, then show the header preview and suggested mapping. */
     public function upload(Request $request): Response
     {

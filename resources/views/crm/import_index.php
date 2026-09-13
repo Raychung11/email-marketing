@@ -24,6 +24,12 @@
               automatically. Up to <?= number_format($rowLimit) ?> rows on your current
               <strong><?= e($trustLevel) ?></strong> trust level.
             </div>
+            <div class="hint">
+              Not sure what the file should look like?
+              <a href="/contacts/import/template">Download a template</a> with the
+              columns filled in. Only the email column is required &mdash; delete
+              any others you do not have.
+            </div>
           </div>
 
           <button class="btn btn--primary" type="submit">Upload and preview</button>

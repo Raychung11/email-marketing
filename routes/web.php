@@ -263,6 +263,10 @@ return static function (Router $router): void {
         $router->post('/contacts/import', ImportController::class . '@upload', [
             RequirePermission::class . ':contacts.import',
         ]);
+        // Before the {id} routes: "template" is a literal, not a batch id.
+        $router->get('/contacts/import/template', ImportController::class . '@template', [
+            RequirePermission::class . ':contacts.import',
+        ]);
         $router->get('/contacts/import/{id}/map', ImportController::class . '@showMapping', [
             RequirePermission::class . ':contacts.import',
         ]);
