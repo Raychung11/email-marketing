@@ -261,6 +261,26 @@ abstract class TestCase
         return $this->postRaw($path, (string) json_encode($body, JSON_UNESCAPED_SLASHES));
     }
 
+    /**
+     * POST a form the way a browser would, with no session and no CSRF token —
+     * the shape a public signup form arrives in from somebody else's website.
+     *
+     * @param array<string,mixed> $body
+     */
+    protected function postPublicForm(string $path, array $body): Response
+    {
+        return $this->app->handle(new Request(
+            [],
+            $body,
+            [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI'    => $path,
+                'REMOTE_ADDR'    => '203.0.113.10',
+                'CONTENT_TYPE'   => 'application/x-www-form-urlencoded',
+            ]
+        ));
+    }
+
     /** POST a raw body, so a test can send something that is not valid JSON. */
     protected function postRaw(string $path, string $body, string $contentType = 'text/plain'): Response
     {

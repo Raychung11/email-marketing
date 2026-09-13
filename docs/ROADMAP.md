@@ -88,9 +88,13 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 
 ## Phase 6 — Advanced
 
-A/B testing · landing pages · hosted + embedded forms · content library ·
-advanced recommendations · agency multi-brand UI.
-Schema for all of these already exists; UI/engine TODO.
+| Item | Status |
+|------|--------|
+| Hosted + embedded signup forms with versioned consent evidence | DONE |
+| A/B testing with a significance gate                  | DONE |
+| Landing pages                                         | TODO — schema exists |
+| Content library (approved claims for AI)              | TODO — schema exists |
+| Agency multi-brand UI                                 | TODO — workspace column exists |
 
 ## Phase 7 — Multichannel
 

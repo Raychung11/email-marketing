@@ -46,7 +46,7 @@ return [
             ['label' => 'Templates',         'route' => '/templates',        'permission' => 'templates.manage'],
             ['label' => 'Write it for me',   'route' => '/ai/studio',        'permission' => 'ai.use'],
             ['label' => 'Content Library',   'route' => '/content-library',  'permission' => 'templates.manage', 'phase' => 6],
-            ['label' => 'A/B Tests',         'route' => '/ab-tests',         'permission' => 'campaigns.view',   'phase' => 6],
+            ['label' => 'A/B tests',         'route' => '/ab-tests',         'permission' => 'campaigns.view',   'phase' => 6],
         ],
     ],
     [
@@ -75,7 +75,7 @@ return [
         'icon'       => 'clipboard',
         'permission' => 'forms.manage',
         'children'   => [
-            ['label' => 'Forms',          'route' => '/forms',          'permission' => 'forms.manage', 'phase' => 6],
+            ['label' => 'Signup forms',   'route' => '/forms',          'permission' => 'forms.manage'],
             ['label' => 'Embedded forms', 'route' => '/forms/embedded', 'permission' => 'forms.manage', 'phase' => 6],
             ['label' => 'Landing pages',  'route' => '/landing-pages',  'permission' => 'forms.manage', 'phase' => 6],
         ],

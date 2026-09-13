@@ -530,7 +530,53 @@ A number nobody can account for is a number people ignore, and then they work th
 list by date again. "Big job" is measured against that business's own average won
 value, so it means something local rather than something invented.
 
-## 18. Tracking and what it is worth
+## 18. Where consent actually comes from
+
+Signup forms are the most important part of the compliance story: everything
+else in the product defends a permission captured here, and a permission
+captured badly cannot be defended at all.
+
+**The consent box is never pre-ticked.** Not configurable, not a setting
+somebody can switch on for a better conversion rate. A pre-ticked box is not
+consent in any jurisdiction this product targets, and offering it would be
+selling a customer a liability dressed as a feature.
+
+**The exact wording is stored with the submission** — the text as it was on
+screen at that moment, plus its version, not a reference to the form's current
+text. Editing a form bumps its version, so people who submitted yesterday keep
+pointing at what they actually read.
+
+**Submitting is not consent.** Somebody filling in "get a quote" asked to be
+answered. They agreed to marketing only if they ticked the box saying so, and
+the two are recorded separately because they are different things.
+
+**A resubscribe form is the one path that may clear a suppression** — a
+deliberate act by the person themselves, audited, and only against an
+`unsubscribe`. A hard bounce or a complaint stays put however keen they are.
+
+Bots are handled with a honeypot positioned off-screen rather than
+`display:none`, which some form-fillers skip. A caught submission is answered as
+if it succeeded and filed as spam: telling a bot it was detected only helps
+whoever wrote it, and a false positive is then recoverable rather than a
+silently lost customer.
+
+## 19. What counts as a winner
+
+A/B tests have two gates before anything is declared, because the honest answer
+for a business with 800 contacts is usually "we cannot tell". Most tools will
+call 4.1% a winner over 3.8% on a sample of two hundred, which is noise dressed
+as insight — and the customer changes their whole approach on the strength of it.
+
+1. **Enough people.** Below 100 delivered per variant, no result is reported.
+2. **Enough difference.** The gap must exceed what chance would produce at this
+   sample size, by a two-proportion z-test at 95%.
+
+When neither wins, that is said plainly, with what would have to change. The
+sample is split round-robin rather than randomly, because randomising 200 people
+can easily give 120/80 and then the comparison is between two different-sized
+groups before anyone has opened anything. Clicks decide it, never opens.
+
+## 20. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

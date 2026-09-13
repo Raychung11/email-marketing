@@ -17,12 +17,14 @@ use App\Controllers\Crm\SegmentController;
 use App\Controllers\Crm\SuppressionController;
 use App\Controllers\Crm\TagController;
 use App\Controllers\DashboardController;
+use App\Controllers\FormAdminController;
 use App\Controllers\HealthController;
 use App\Controllers\LeadController;
 use App\Controllers\Marketing\CampaignController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
+use App\Controllers\Public_\FormController;
 use App\Controllers\Public_\SesWebhookController;
 use App\Controllers\Public_\TrackingController;
 use App\Controllers\Public_\UnsubscribeController;
@@ -94,6 +96,16 @@ return static function (Router $router): void {
     $router->get('/track/click/{token}', TrackingController::class . '@click', [Throttle::class . ':600,60']);
 
     /*
+     * Signup forms.
+     *
+     * Public, because the person filling one in is a member of the public. The
+     * tenant comes from the organisation and slug together, so a slug from one
+     * business can never resolve against another's form.
+     */
+    $router->get('/f/{organisation}/{slug}', FormController::class . '@show', [Throttle::class . ':120,60']);
+    $router->post('/f/{organisation}/{slug}', FormController::class . '@submit', [Throttle::class . ':20,60']);
+
+    /*
      * Amazon SES delivery notifications, via SNS.
      *
      * No auth and no CSRF — Amazon has no credentials of ours to present. The SNS
@@ -108,6 +120,23 @@ return static function (Router $router): void {
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
+        // ------------------------------------------------------------ forms
+        $router->get('/forms', FormAdminController::class . '@index', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms', FormAdminController::class . '@store', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->get('/forms/{id}', FormAdminController::class . '@show', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms/{id}', FormAdminController::class . '@update', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms/{id}/publish', FormAdminController::class . '@publish', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+
         // ------------------------------------------------------------ leads
         $router->get('/leads', LeadController::class . '@index', [
             RequirePermission::class . ':leads.view',
