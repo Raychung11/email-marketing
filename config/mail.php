@@ -18,6 +18,9 @@ return [
             'secret'            => env('AWS_SECRET_ACCESS_KEY', ''),
             'configuration_set' => env('AWS_SES_CONFIGURATION_SET', ''),
             'sns_topic_arn'     => env('AWS_SES_SNS_TOPIC_ARN', ''),
+            // Only for temporary credentials from STS. Long-lived keys leave it empty.
+            'session_token'     => env('AWS_SESSION_TOKEN', ''),
+            'timeout'           => (int) env('AWS_SES_TIMEOUT', 30),
         ],
         'log' => [
             'path' => base_path('storage/logs/mail.log'),

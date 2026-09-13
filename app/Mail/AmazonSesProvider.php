@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace App\Mail;
 
 use App\Core\Logger;
+use App\Mail\Aws\SesClient;
+use App\Mail\Aws\SesException;
+use App\Mail\Aws\SignatureV4;
+use App\Support\CurlHttpClient;
+use App\Support\HttpClient;
 
 /**
- * Amazon SES via the AWS SDK for PHP (SESv2).
+ * Amazon SES over the SESv2 REST API.
  *
- * Requires `composer require aws/aws-sdk-php`. The SDK is a suggested rather than
- * a hard dependency so that the core application, its migrations and its test
- * suite install and run with no vendor tree at all; isConfigured() reports the
- * absence rather than the process dying at boot.
+ * No SDK. The AWS SDK is sixty megabytes and several thousand files to make
+ * four API calls, which is a poor trade on the shared hosting most of this
+ * product's customers run, and it would be the only runtime dependency in the
+ * application. SesClient speaks to the same endpoints and returns the same
+ * array shapes, so everything below reads identically either way.
  *
  * Notes that matter in production:
  *  - ONE recipient per send. Never BCC, never multiple To.
@@ -24,12 +30,33 @@ use App\Core\Logger;
  */
 final class AmazonSesProvider implements EmailProviderInterface
 {
-    private ?object $client = null;
+    /**
+     * Errors where retrying produces the same answer. Retrying these burns
+     * sending reputation for nothing, so they are rejected outright rather than
+     * queued for another four attempts. Everything else — throttling, 5xx, a
+     * dropped connection — gets the backoff.
+     */
+    private const PERMANENT_FAILURES = [
+        'MessageRejected',
+        'MailFromDomainNotVerified',
+        'AccountSendingPausedException',
+        'AccountSendingPaused',
+        'SendingPausedException',
+        'ConfigurationSetDoesNotExistException',
+        'ConfigurationSetDoesNotExist',
+        'InvalidParameterValue',
+        'BadRequestException',
+        'NotFoundException',
+        'AccessDeniedException',
+    ];
+
+    private ?SesClient $client = null;
 
     /** @param array<string,mixed> $config */
     public function __construct(
         private readonly array $config,
         private readonly ?Logger $logger = null,
+        private readonly ?HttpClient $http = null,
     ) {
     }
 
@@ -45,20 +72,17 @@ final class AmazonSesProvider implements EmailProviderInterface
 
     public function isConfigured(): bool
     {
-        if (!class_exists('\Aws\SesV2\SesV2Client')) {
-            return false;
-        }
-
-        // Credentials may legitimately come from an instance role rather than
-        // static keys, which is the preferred deployment.
-        return (string) ($this->config['region'] ?? '') !== '';
+        return (string) ($this->config['region'] ?? '') !== ''
+            && (string) ($this->config['key'] ?? '') !== ''
+            && (string) ($this->config['secret'] ?? '') !== '';
     }
 
     public function send(OutboundMessage $message): SendResult
     {
         if (!$this->isConfigured()) {
             return SendResult::rejected(
-                'Amazon SES is not configured. Install aws/aws-sdk-php and set AWS_REGION.',
+                'Amazon SES is not configured. Set AWS_REGION, AWS_ACCESS_KEY_ID and '
+                . 'AWS_SECRET_ACCESS_KEY in .env.',
                 'SES_NOT_CONFIGURED'
             );
         }
@@ -120,7 +144,7 @@ final class AmazonSesProvider implements EmailProviderInterface
         }
 
         try {
-            $result = $this->client()->getEmailIdentity(['EmailIdentity' => $identity]);
+            $result = $this->identity($identity);
 
             $dkim       = $result['DkimAttributes'] ?? [];
             $dkimStatus = strtolower((string) ($dkim['Status'] ?? 'pending'));
@@ -204,9 +228,14 @@ final class AmazonSesProvider implements EmailProviderInterface
 
         if ($this->isConfigured()) {
             try {
-                $result  = $this->client()->getEmailIdentity(['EmailIdentity' => $domain]);
+                $result  = $this->identity($domain);
                 $records = $this->dkimRecordsFrom($domain, $result['DkimAttributes'] ?? []);
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                $this->logger?->warning('Could not obtain DKIM records from SES', [
+                    'domain' => $domain,
+                    'error'  => $e->getMessage(),
+                ]);
+
                 $records = [];
             }
         }
@@ -228,6 +257,39 @@ final class AmazonSesProvider implements EmailProviderInterface
         ];
 
         return $records;
+    }
+
+    /**
+     * The SES identity for a domain, registering it first if SES has never seen
+     * it.
+     *
+     * Without this, adding a sending domain asked SES about an identity that did
+     * not exist, got a 404, and returned no DKIM records at all — so the wizard
+     * showed SPF and DMARC only, the customer published those, and verification
+     * could never pass because DKIM alone decides it. Registering is what makes
+     * SES generate the three CNAME tokens in the first place.
+     *
+     * @return array<string,mixed>
+     */
+    private function identity(string $domain): array
+    {
+        try {
+            return $this->client()->getEmailIdentity(['EmailIdentity' => $domain]);
+        } catch (SesException $e) {
+            if ($e->awsCode !== 'NotFoundException') {
+                throw $e;
+            }
+        }
+
+        $created = $this->client()->createEmailIdentity(['EmailIdentity' => $domain]);
+
+        // The create response already carries the tokens; only ask again if this
+        // particular response did not include them.
+        if (($created['DkimAttributes']['Tokens'] ?? []) !== []) {
+            return $created;
+        }
+
+        return $this->client()->getEmailIdentity(['EmailIdentity' => $domain]);
     }
 
     /**
@@ -257,15 +319,15 @@ final class AmazonSesProvider implements EmailProviderInterface
     {
         $message = $e->getMessage();
 
-        // Permanent: retrying will produce the same answer and burn reputation.
-        foreach ([
-            'MessageRejected',
-            'MailFromDomainNotVerified',
-            'AccountSendingPaused',
-            'ConfigurationSetDoesNotExist',
-            'InvalidParameterValue',
-            'BadRequestException',
-        ] as $permanent) {
+        // The API reports the error type explicitly, so prefer it to guessing
+        // from the message text.
+        if ($e instanceof SesException && $e->awsCode !== '') {
+            return $this->isPermanent($e->awsCode)
+                ? SendResult::rejected($message, $e->awsCode)
+                : SendResult::failed($message, 'TRANSIENT');
+        }
+
+        foreach (self::PERMANENT_FAILURES as $permanent) {
             if (str_contains($message, $permanent)) {
                 return SendResult::rejected($message, $permanent);
             }
@@ -275,35 +337,30 @@ final class AmazonSesProvider implements EmailProviderInterface
         return SendResult::failed($message, 'TRANSIENT');
     }
 
-    private function client(): object
+    private function isPermanent(string $code): bool
+    {
+        return in_array($code, self::PERMANENT_FAILURES, true);
+    }
+
+    private function client(): SesClient
     {
         if ($this->client !== null) {
             return $this->client;
         }
 
-        /** @var class-string $clientClass */
-        $clientClass = '\Aws\SesV2\SesV2Client';
+        $region = (string) ($this->config['region'] ?? 'us-east-1');
 
-        if (!class_exists($clientClass)) {
-            throw new \RuntimeException(
-                'aws/aws-sdk-php is not installed. Run: composer require aws/aws-sdk-php'
-            );
-        }
-
-        $arguments = [
-            'version' => '2019-09-27',
-            'region'  => (string) ($this->config['region'] ?? 'us-east-1'),
-        ];
-
-        // Static keys only when provided; otherwise the SDK resolves an instance
-        // role, which is the preferred production setup.
-        if ((string) ($this->config['key'] ?? '') !== '' && (string) ($this->config['secret'] ?? '') !== '') {
-            $arguments['credentials'] = [
-                'key'    => (string) $this->config['key'],
-                'secret' => (string) $this->config['secret'],
-            ];
-        }
-
-        return $this->client = new $clientClass($arguments);
+        return $this->client = new SesClient(
+            new SignatureV4(
+                (string) ($this->config['key'] ?? ''),
+                (string) ($this->config['secret'] ?? ''),
+                $region,
+                'ses',
+                (string) ($this->config['session_token'] ?? '')
+            ),
+            $this->http ?? new CurlHttpClient(),
+            $region,
+            (int) ($this->config['timeout'] ?? 30)
+        );
     }
 }

@@ -215,6 +215,11 @@ final class Application
         $c->singleton(TenantContext::class, static fn (): TenantContext => new TenantContext());
 
         $c->singleton(
+            \App\Support\HttpClient::class,
+            static fn (): \App\Support\HttpClient => new \App\Support\CurlHttpClient()
+        );
+
+        $c->singleton(
             \App\Support\Heartbeat::class,
             static fn (): \App\Support\Heartbeat => new \App\Support\Heartbeat(base_path('storage/framework'))
         );
@@ -274,7 +279,8 @@ final class Application
                 ),
                 default => new \App\Mail\AmazonSesProvider(
                     (array) $config->get('mail.providers.ses', []),
-                    $logger
+                    $logger,
+                    $c->make(\App\Support\HttpClient::class)
                 ),
             };
         });

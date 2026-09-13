@@ -335,6 +335,20 @@ uses today because it has no dependencies.
 
 ## Deployment
 
+### No runtime dependencies
+
+There is no `vendor/` directory and nothing to `composer install` before the
+application runs. PSR-4 autoloading, the test runner, the schema builder, the
+queue and the Amazon SES client are all part of the source.
+
+SES in particular talks to the SESv2 REST API directly, signing requests with a
+hand-written AWS Signature V4 implementation
+([`app/Mail/Aws/`](app/Mail/Aws/)) — checked against AWS's own published test
+vectors, not against itself. The alternative was 60MB and several thousand files
+of SDK for four API calls, on hosting where disk is a fixed allowance.
+
+PHPUnit is the one dev dependency, and `tests/run.php` does not need it.
+
 Full runbook — Nginx, Supervisor, cron, SES, backups, monitoring and a production
 security checklist — in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
