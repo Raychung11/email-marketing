@@ -193,6 +193,107 @@ switch ($command) {
         }
         break;
 
+    case 'mail:check':
+        // Proves the credentials, the region and the signing all work, without
+        // sending anything. Every failure here is one you want to find now
+        // rather than halfway through a campaign.
+        $provider = $container->make(App\Mail\EmailProviderInterface::class);
+
+        $out('Provider:    ' . $provider->name());
+
+        if ($provider->name() === 'log') {
+            // Reporting a quota and "signing works" here would be a lie: the log
+            // provider writes to a file and signs nothing. Say what is actually
+            // true, which is that no email can leave this server.
+            $out('');
+            $out('MAIL_PROVIDER is "log". Messages are written to '
+                . (string) $container->make(Config::class)->get('mail.providers.log.path')
+                . ' and NOTHING is sent.');
+            $out('');
+            $out('That is the safe default. Set MAIL_PROVIDER=ses in .env when your');
+            $out('sending domain is verified and you are ready to send for real.');
+            break;
+        }
+
+        if (!$provider->isConfigured()) {
+            $out('Configured:  NO');
+            $out('');
+            $fail(
+                $provider->name() === 'log'
+                    ? 'MAIL_PROVIDER is set to "log", so nothing will ever be sent. Set MAIL_PROVIDER=ses when you are ready.'
+                    : 'Set AWS_REGION, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.'
+            );
+        }
+
+        $out('Configured:  yes');
+        $out('Region:      ' . (string) $container->make(Config::class)->get('mail.providers.ses.region'));
+        $out('From:        ' . (string) $container->make(Config::class)->get('mail.from.address'));
+        $out('');
+        $out('Asking the provider for your live quota...');
+
+        $quota = $provider->getQuota();
+
+        if ($quota->max24HourSend <= 0.0 && $quota->maxSendRate <= 0.0) {
+            // getQuota() fails closed and returns zeros rather than an error, so
+            // ask for an identity as well purely to get AWS's own words. Telling
+            // someone "check the log" when we could just show them the reason is
+            // a wasted round trip for them.
+            $fromDomain = substr((string) $container->make(Config::class)->get('mail.from.address'), (int) strrpos(
+                (string) $container->make(Config::class)->get('mail.from.address'),
+                '@'
+            ) + 1);
+
+            $reason = $provider->validateIdentity($fromDomain)->error;
+
+            $out('');
+
+            if ($reason !== null && $reason !== '') {
+                $out('Amazon SES said:');
+                $out('  ' . $reason);
+                $out('');
+            }
+
+            $fail(match (true) {
+                str_contains((string) $reason, 'security token') || str_contains((string) $reason, 'AccessDenied')
+                    => 'The credentials were rejected. Check AWS_ACCESS_KEY_ID and '
+                        . 'AWS_SECRET_ACCESS_KEY in .env, and that the IAM user has the '
+                        . 'aigrowthhub-ses-send policy attached.',
+                str_contains((string) $reason, 'SignatureDoesNotMatch')
+                    => 'The secret key is wrong, or the server clock is out by more than '
+                        . 'fifteen minutes. Check the secret first, then `date -u`.',
+                str_contains((string) $reason, 'Could not reach')
+                    => 'Could not reach Amazon SES at all. Check outbound HTTPS is allowed.',
+                default
+                    => 'The provider returned no quota. Usually the credentials are wrong, '
+                        . 'the region is wrong, or SES is not enabled in that region.',
+            });
+        }
+
+        $out(sprintf('  Max per 24 hours   %s', number_format($quota->max24HourSend)));
+        $out(sprintf('  Max per second     %s', rtrim(rtrim(number_format($quota->maxSendRate, 2), '0'), '.')));
+        $out(sprintf('  Sent last 24 hours %s', number_format($quota->sentLast24Hours)));
+        $out('');
+
+        if ($quota->sandbox) {
+            $out('SANDBOX. Your account can only send to addresses you have verified in');
+            $out('the SES console, and at a low rate. Everything else works normally.');
+            $out('Request production access in SES once your domain is verified.');
+        } else {
+            $out('Production access is enabled: you can send to anyone.');
+        }
+
+        $reputation = $provider->getReputationMetrics();
+
+        if (!$reputation->sendingEnabled) {
+            $out('');
+            $out('WARNING: sending is currently DISABLED on this account'
+                . ($reputation->enforcementStatus !== null ? ' (' . $reputation->enforcementStatus . ')' : '') . '.');
+        }
+
+        $out('');
+        $out('Credentials, region and request signing all work.');
+        break;
+
     case 'help':
     default:
         $out('Available commands:');
@@ -203,6 +304,7 @@ switch ($command) {
             'migrate:status'   => 'Show migration state',
             'db:seed'          => 'Run seeders (roles, permissions, plans, compliance rules)',
             'db:check'         => 'Verify core tables exist',
+            'mail:check'       => 'Verify the email provider credentials and read your live quota',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',
