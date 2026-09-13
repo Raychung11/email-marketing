@@ -249,12 +249,20 @@ back to step 5 and fix the document root first.
 
 Without cron the site loads, looks completely normal, and never sends anything.
 
-**hPanel → Advanced → Cron Jobs.** Add the two jobs in
-[`deploy/hostinger/cron.txt`](../deploy/hostinger/cron.txt), substituting your
-real path (run `pwd` in the `app` directory to get it).
+**hPanel → Advanced → Cron Jobs.** Choose **Custom**, not PHP — PHP mode locks
+the command to `/usr/bin/php`, which is 8.2 on Hostinger and too old for this.
+
+Add the two jobs from [`deploy/hostinger/cron.txt`](../deploy/hostinger/cron.txt),
+substituting your real path (run `pwd` in the `app` directory to get it). Set
+every dropdown to its `Every (*)` option.
 
 There are exactly two — a scheduler and a worker — and adding a second copy of
 either is how a campaign gets sent twice.
+
+Each is a one-line call to a script, because Hostinger caps the command field at
+255 characters and the worker command is well past it. The scripts find a PHP
+8.3+ binary by checking its version rather than trusting a hardcoded path, so a
+host that relocates PHP does not silently stop your sending.
 
 After a couple of minutes:
 

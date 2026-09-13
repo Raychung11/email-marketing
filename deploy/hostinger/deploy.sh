@@ -72,7 +72,7 @@ say "Setting permissions"
 mkdir -p storage/logs storage/uploads/imports storage/framework/cache storage/tmp
 find storage -type d -exec chmod 755 {} \;
 chmod 600 .env
-chmod +x deploy/hostinger/deploy.sh
+chmod +x deploy/hostinger/*.sh
 
 # ---------------------------------------------------------------------------
 # Caches
