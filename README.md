@@ -24,10 +24,10 @@ Website / Forms / POS / CRM / CSV / API → Customer Data Hub → AI Segmentatio
 
 ## Status
 
-**Phase 1 (Foundation) is complete and tested.** Phases 2–7 are scoped, and the
-database schema, provider interfaces, queue, worker and scheduler for them are
-already in place. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the item-by-item
-state.
+**All seven phases are built and tested.** See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for the item-by-item state, including the
+few things still marked TODO (landing pages, the content library, agency
+multi-brand UI — schema exists for all three).
 
 | Shipped | |
 |---|---|
@@ -35,13 +35,40 @@ state.
 | RBAC | 8 roles, 26 permissions, permission-based checks (never role-name checks) |
 | Auth | registration, login with dual-axis throttling, password reset, session hardening |
 | CRM | contacts, companies, tags, lists, custom fields, Customer 360, merge, anonymise |
-| Segmentation | nested AND/OR engine with a whitelisted field registry and relative dates |
+| Smart lists | nested AND/OR engine with a whitelisted field registry and relative dates |
 | Compliance | append-only consent history, suppression, AU + US rule sets, campaign validation |
 | Import | 8-step CSV wizard with a mandatory consent declaration that refuses purchased/scraped lists |
 | Unsubscribe | HMAC-signed tokens, preference centre, guaranteed footer |
-| Infrastructure | queue (Redis/DB/sync), worker, scheduler with locks, provider-event idempotency |
+| Sending | domain verification (DKIM/SPF/DMARC), block-based email builder, approval workflow |
+| Send pipeline | recipient snapshot, chunked dispatch, compliance re-checked before the provider call, live-quota throttling |
+| Tracking | open pixel and click redirect that cannot become an open redirect, UTM builder |
+| Provider events | SES over SNS with full signature verification, bounce/complaint → suppression |
+| Reporting | campaign funnel, top links, per-mailbox-provider inbox health, revenue attribution |
+| AI | campaign studio, subject lines, smart lists from plain English, post-mortems, a read-only assistant |
+| Journeys | triggers, conditions, actions, timers, re-entry control, run logs |
+| Enquiries | pipeline, explainable lead scoring, unanswered-enquiry tracking |
+| Website | tracking snippet, `/api/v1/events`, conversion API, attribution |
+| Forms | hosted and embedded signup forms with versioned consent evidence |
+| A/B tests | with a significance gate that refuses to call a winner it cannot justify |
+| Text messages | SMS and WhatsApp behind the channel interface, per-channel consent |
 | API | `/api/v1` with hashed keys, scopes and per-key rate limits |
-| Tests | 184 tests / 590 assertions covering tenancy, RBAC, compliance and security |
+| Tests | 426 tests / 1,304 assertions |
+
+### The opinions this codebase holds
+
+Most of what is distinctive here is what the product refuses to do:
+
+- **It will not send to somebody who did not agree.** Compliance is re-checked
+  in the worker immediately before the provider call, not just at preview.
+- **It will not let AI act.** Every AI feature produces a draft or a suggestion
+  for a person to accept. The assistant has no write tool at all.
+- **It will not invent a figure.** Every number in AI-written prose is checked
+  against the facts it was given; a sentence quoting anything else is dropped.
+- **It will not pre-tick a consent box.** Not a setting.
+- **It will not call an A/B test it cannot justify** — "too close to call" is a
+  legitimate answer, and usually the honest one for a list of 800.
+- **It will not treat email consent as permission to text.**
+- **It will not show a rate without the number underneath it.**
 
 ---
 
@@ -278,7 +305,7 @@ takes a few seconds. The schema comes from the real migration files, so a test
 schema cannot drift from production.
 
 ```
-OK — 184 tests, 590 assertions
+OK — 426 tests, 1304 assertions
 ```
 
 What is covered, and why each one exists:
