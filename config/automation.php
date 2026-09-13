@@ -78,6 +78,10 @@ return [
         'create_task'      => ['label' => 'Give someone a job to do', 'class' => App\Automation\Actions\CreateTaskAction::class],
         'notify_team'      => ['label' => 'Tell the team',            'class' => App\Automation\Actions\NotifyTeamAction::class],
         'webhook'          => ['label' => 'Tell another system',      'class' => App\Automation\Actions\WebhookAction::class],
+        // Phase 7. Same shape as the email action, and the same rule: consent is
+        // checked for THIS channel, so a journey cannot text somebody on the
+        // strength of them having agreed to emails.
+        'send_sms'         => ['label' => 'Send a text message',      'class' => App\Automation\Actions\SendTextAction::class],
     ],
 
     /*

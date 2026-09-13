@@ -276,6 +276,28 @@ final class Application
 
         $c->alias(\App\Mail\ChannelProviderInterface::class, \App\Mail\EmailProviderInterface::class);
 
+        // Text messaging, behind the same channel abstraction as email so the
+        // automation engine never names a vendor or a channel.
+        $c->singleton(\App\Messaging\TextProviderInterface::class, static function (Container $c): \App\Messaging\TextProviderInterface {
+            /** @var Config $config */
+            $config = $c->make(Config::class);
+            $driver = (string) $config->get('messaging.provider', 'log');
+
+            if ($driver === 'twilio') {
+                return new \App\Messaging\TwilioTextProvider(
+                    (array) $config->get('messaging.providers.twilio', []),
+                    'sms',
+                    $c->make(Logger::class)
+                );
+            }
+
+            return new \App\Messaging\LogTextProvider(
+                (string) $config->get('messaging.providers.log.path', '/tmp/sms.log'),
+                'sms',
+                $c->make(Logger::class)
+            );
+        });
+
         // --- DNS (domain verification) --------------------------------------
         $c->singleton(\App\Support\DnsResolver::class, static fn (): \App\Support\DnsResolver
             => new \App\Support\SystemDnsResolver());

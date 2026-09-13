@@ -576,7 +576,38 @@ sample is split round-robin rather than randomly, because randomising 200 people
 can easily give 120/80 and then the comparison is between two different-sized
 groups before anyone has opened anything. Clicks decide it, never opens.
 
-## 20. Tracking and what it is worth
+## 20. Texts are not email
+
+`contact_consents` has always had a `channel` column, and this is what it was
+for. **Agreeing to email is not agreeing to texts.** A contact who ticked a box
+about your newsletter has not said you may text them, and treating one
+permission as the other is the most likely way a business using this product
+gets into trouble — texts are personal, people notice them, and the complaint
+goes to a regulator rather than a spam folder. `TextMessageService::canSend()`
+checks consent for `sms` specifically, and a journey's `send_sms` action goes
+through the same service so there is no looser second path.
+
+Opting out works per channel in both directions: replying STOP suppresses the
+number and withdraws SMS consent, and leaves their email subscription alone.
+
+Two things a text needs that an email does not:
+
+**Quiet hours.** Email arriving at 2am is ignored until morning; a text wakes
+somebody up, and they blame the business. Marketing texts outside the window are
+*held*, not dropped — the message is still worth sending, just not now. The
+window is evaluated in the recipient's timezone where we hold one.
+
+**A cost warning.** Email is effectively free per message and texts are not, so
+the product says what a send will cost before anybody presses the button, counts
+segments rather than characters, and quantifies the saving from trimming a
+two-segment message to one. A channel that hides its cost until the invoice is a
+channel that loses the customer.
+
+The opt-out instruction is appended in code rather than trusted to whoever wrote
+the message — it is the one line nobody remembers to type, and the fastest route
+to a complaint when it is missing.
+
+## 21. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

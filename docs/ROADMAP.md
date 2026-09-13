@@ -96,11 +96,16 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Content library (approved claims for AI)              | TODO — schema exists |
 | Agency multi-brand UI                                 | TODO — workspace column exists |
 
-## Phase 7 — Multichannel
+## Phase 7 — Multichannel  ✅ DONE
 
-SMS and WhatsApp providers behind `ChannelProviderInterface`, new automation
-actions, per-channel consent (the `channel` column already exists on
-`contact_consents`).
+| Item | Status |
+|------|--------|
+| `TextProviderInterface` behind `ChannelProviderInterface` | DONE |
+| Twilio provider (SMS + WhatsApp), log provider for dev/test | DONE |
+| Per-channel consent — email consent never authorises a text | DONE |
+| STOP handling, quiet hours, cost estimate before sending | DONE |
+| `send_sms` automation action                          | DONE |
+| WhatsApp template messages                            | PARTIAL — provider supports it, no UI |
 
 ## Non-negotiables carried through every phase
 
