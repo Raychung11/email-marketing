@@ -34,9 +34,10 @@ final class Connection
     {
     }
 
-    public static function fromPdo(PDO $pdo, string $driver = 'sqlite'): self
+    /** @param array<string,mixed> $config */
+    public static function fromPdo(PDO $pdo, string $driver = 'sqlite', array $config = []): self
     {
-        $connection      = new self(['driver' => $driver]);
+        $connection      = new self(['driver' => $driver] + $config);
         $connection->pdo = $pdo;
 
         return $connection;
@@ -50,6 +51,24 @@ final class Connection
     public function driver(): string
     {
         return (string) ($this->config['driver'] ?? 'mysql');
+    }
+
+    public function charset(): string
+    {
+        return (string) ($this->config['charset'] ?? 'utf8mb4');
+    }
+
+    /**
+     * The collation the schema builder stamps on every CREATE TABLE.
+     *
+     * This has to come from configuration rather than a constant: MySQL 8 and
+     * MariaDB do not share a collation name. MariaDB has never had
+     * utf8mb4_0900_ai_ci and rejects it outright, so a hardcoded value makes the
+     * application undeployable on the shared hosting most small businesses run.
+     */
+    public function collation(): string
+    {
+        return (string) ($this->config['collation'] ?? 'utf8mb4_unicode_ci');
     }
 
     private function connect(): PDO

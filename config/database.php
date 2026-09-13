@@ -14,7 +14,10 @@ return [
             'username'  => env('DB_USERNAME', 'root'),
             'password'  => env('DB_PASSWORD', ''),
             'charset'   => env('DB_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_COLLATION', 'utf8mb4_0900_ai_ci'),
+            // utf8mb4_unicode_ci because MySQL 8 and MariaDB both accept it.
+            // utf8mb4_0900_ai_ci is better on MySQL 8 and does not exist at all
+            // on MariaDB, so it is opt-in rather than the default.
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
         ],
 
         // Used by the test suite. MySQL remains the canonical production schema;

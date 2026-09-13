@@ -131,8 +131,11 @@ switch ($command) {
         $out("-- {$driver} schema for " . $container->make(Config::class)->get('app.name'));
         $out('-- Generated ' . gmdate('c') . ' from database/migrations');
         $out('');
+        $dbConfig = $container->make(Config::class);
         $out((new App\Database\SchemaDumper(
-            (string) $container->make(Config::class)->get('database.migrations_path')
+            (string) $dbConfig->get('database.migrations_path'),
+            (string) $dbConfig->get('database.connections.mysql.charset', 'utf8mb4'),
+            (string) $dbConfig->get('database.connections.mysql.collation', 'utf8mb4_unicode_ci')
         ))->toSql($driver));
         break;
 

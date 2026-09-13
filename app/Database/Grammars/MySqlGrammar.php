@@ -9,10 +9,22 @@ use App\Database\Schema\Column;
 
 final class MySqlGrammar extends Grammar
 {
+    /**
+     * Charset and collation are configurable because MySQL 8 and MariaDB do not
+     * share collation names, and most shared hosting runs MariaDB.
+     * utf8mb4_unicode_ci is the default because both accept it.
+     */
     public function __construct(
         private readonly string $charset = 'utf8mb4',
-        private readonly string $collation = 'utf8mb4_0900_ai_ci',
+        private readonly string $collation = 'utf8mb4_unicode_ci',
     ) {
+        // These two are interpolated into DDL rather than bound, because a
+        // charset is not a value a placeholder can carry. Neither is free text.
+        foreach (['charset' => $charset, 'collation' => $collation] as $name => $value) {
+            if (preg_match('/^[A-Za-z0-9_]+$/', $value) !== 1) {
+                throw new \InvalidArgumentException("Invalid {$name} [{$value}].");
+            }
+        }
     }
 
     public function wrap(string $identifier): string
