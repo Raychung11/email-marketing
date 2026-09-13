@@ -7,6 +7,7 @@ use App\Controllers\Auth\PasswordController;
 use App\Controllers\Auth\RegisterController;
 use App\Controllers\Ai\StudioController;
 use App\Controllers\AnalyticsController;
+use App\Controllers\AutomationController;
 use App\Controllers\ComplianceController;
 use App\Controllers\Crm\CompanyController;
 use App\Controllers\Crm\ContactController;
@@ -106,6 +107,32 @@ return static function (Router $router): void {
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
+        // --------------------------------------------------------- journeys
+        $router->get('/automations', AutomationController::class . '@index', [
+            RequirePermission::class . ':automations.view',
+        ]);
+        $router->post('/automations', AutomationController::class . '@store', [
+            RequirePermission::class . ':automations.create',
+        ]);
+        $router->get('/automations/{id}', AutomationController::class . '@show', [
+            RequirePermission::class . ':automations.view',
+        ]);
+        $router->post('/automations/{id}/steps', AutomationController::class . '@addStep', [
+            RequirePermission::class . ':automations.edit',
+        ]);
+        $router->post('/automations/{id}/activate', AutomationController::class . '@activate', [
+            RequirePermission::class . ':automations.activate',
+        ]);
+        $router->post('/automations/{id}/pause', AutomationController::class . '@pause', [
+            RequirePermission::class . ':automations.activate',
+        ]);
+        $router->post('/automations/{id}/delete', AutomationController::class . '@destroy', [
+            RequirePermission::class . ':automations.edit',
+        ]);
+        $router->get('/automations/runs/{id}', AutomationController::class . '@runLog', [
+            RequirePermission::class . ':automations.view',
+        ]);
+
         /*
          * ------------------------------------------------------------------ AI
          *

@@ -30,6 +30,7 @@ final class ContactService
         private readonly ComplianceService $compliance,
         private readonly ActivityService $activity,
         private readonly AuditService $audit,
+        private readonly \App\Automation\TriggerDispatcher $triggers,
         private readonly Connection $connection,
         private readonly Config $config,
         private readonly Clock $clock,
@@ -62,7 +63,7 @@ final class ContactService
             ]);
         }
 
-        return $this->connection->transaction(function () use ($attributes, $email, $consentEvidence): int {
+        $id = $this->connection->transaction(function () use ($attributes, $email, $consentEvidence): int {
             $companyId = $this->resolveCompanyId($attributes);
 
             $contactId = $this->contacts->create($this->sanitise($attributes, [
@@ -103,6 +104,13 @@ final class ContactService
 
             return $contactId;
         });
+
+        // Outside the transaction on purpose: starting a journey is not part of
+        // creating the contact, and a misconfigured automation must never roll
+        // back a customer record.
+        $this->triggers->fire('contact_created', $id, ['reference' => (string) ($attributes['source'] ?? 'manual')]);
+
+        return $id;
     }
 
     /** @param array<string,mixed> $attributes */
@@ -395,6 +403,13 @@ final class ContactService
 
         if ($this->tags->attach($contactId, $tagId)) {
             $this->activity->record('tag_added', $contactId, 'Tagged "' . $tag['name'] . '"', ['tag_id' => $tagId]);
+
+            // Only on an actual change. Re-applying a tag somebody already has
+            // should not start a journey they have already been through.
+            $this->triggers->fire('tag_added', $contactId, [
+                'tag_id'    => $tagId,
+                'reference' => (string) $tag['name'],
+            ]);
         }
     }
 
@@ -566,8 +581,8 @@ final class ContactService
         foreach ($listIds as $listId) {
             $listId = (int) $listId;
 
-            if ($listId > 0 && $this->lists->find($listId) !== null) {
-                $this->lists->addContact($listId, $contactId);
+            if ($listId > 0 && $this->lists->find($listId) !== null && $this->lists->addContact($listId, $contactId)) {
+                $this->triggers->fire('list_joined', $contactId, ['list_id' => $listId]);
             }
         }
     }
@@ -586,8 +601,8 @@ final class ContactService
         }
 
         foreach (array_diff($desired, $current) as $listId) {
-            if ($this->lists->find($listId) !== null) {
-                $this->lists->addContact($listId, $contactId);
+            if ($this->lists->find($listId) !== null && $this->lists->addContact($listId, $contactId)) {
+                $this->triggers->fire('list_joined', $contactId, ['list_id' => $listId]);
             }
         }
     }

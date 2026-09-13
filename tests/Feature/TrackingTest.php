@@ -165,7 +165,7 @@ final class TrackingTest extends TestCase
         // with it would lose the fact that the provider never confirmed delivery.
         $this->assertSame('sent', (string) $message['status']);
 
-        $link = $this->connection->selectOne('SELECT * FROM campaign_links LIMIT 1') ?? [];
+        $link = $this->connection->selectOne('SELECT * FROM tracked_links LIMIT 1') ?? [];
         $this->assertSame(1, (int) $link['click_count']);
         $this->assertSame(1, (int) $link['unique_click_count']);
 

@@ -16,7 +16,7 @@ use App\Support\TenantContext;
  * Two design points that matter more than the mechanics:
  *
  *  1. NO OPEN REDIRECT. The redirect endpoint never takes a URL. It takes a
- *     signed token identifying a row in campaign_links, and the destination comes
+ *     signed token identifying a row in tracked_links, and the destination comes
  *     from that row — a URL an authenticated user put into a campaign. Even with a
  *     valid signature, an attacker cannot point the redirect anywhere new.
  *
@@ -75,7 +75,11 @@ final class LinkTracker
                 }
 
                 $withUtm = $this->appendUtm($url, $campaign);
-                $linkId  = $this->registerLink($campaignId, $withUtm);
+                $linkId  = $this->registerLink(
+                    $campaignId > 0 ? 'campaign' : 'automation',
+                    $campaignId > 0 ? $campaignId : (int) ($campaign['automation_id'] ?? 0),
+                    $withUtm
+                );
 
                 $token = $this->signer->sign([
                     'o' => (int) $campaign['organisation_id'],
@@ -92,6 +96,30 @@ final class LinkTracker
         );
 
         return $this->appendOpenPixel($rewritten, $campaign, $contactId, $messageId);
+    }
+
+    /**
+     * Rewrite links in an automation email.
+     *
+     * Same machinery as a campaign, minus the campaign. Automation links are
+     * registered against campaign_id 0, so a journey's click reports do not
+     * pollute any campaign's numbers and cannot be mistaken for one.
+     *
+     * @param array<string,mixed> $organisation
+     */
+    public function rewriteForAutomation(
+        string $html,
+        array $organisation,
+        int $contactId,
+        int $messageId,
+    ): string {
+        return $this->rewrite(
+            $html,
+            ['id' => 0, 'organisation_id' => (int) $organisation['id'], 'utm_medium' => 'email',
+             'utm_source' => 'automation'],
+            $contactId,
+            $messageId
+        );
     }
 
     /**
@@ -144,13 +172,18 @@ final class LinkTracker
      * Keyed on a hash of the URL so the same link in the same campaign is one row
      * with one click count, however many times it appears in the body.
      */
-    public function registerLink(int $campaignId, string $url, ?string $label = null): int
-    {
+    public function registerLink(
+        string $ownerType,
+        int $ownerId,
+        string $url,
+        ?string $label = null,
+    ): int {
         $hash = substr(hash('sha256', $url), 0, 40);
 
-        $existing = $this->connection->table('campaign_links')
+        $existing = $this->connection->table('tracked_links')
             ->where('organisation_id', '=', $this->tenant->organisationId())
-            ->where('campaign_id', '=', $campaignId)
+            ->where('owner_type', '=', $ownerType)
+            ->where('owner_id', '=', $ownerId)
             ->where('link_hash', '=', $hash)
             ->first();
 
@@ -158,9 +191,10 @@ final class LinkTracker
             return (int) $existing['id'];
         }
 
-        return $this->connection->table('campaign_links')->insert([
+        return $this->connection->table('tracked_links')->insert([
             'organisation_id' => $this->tenant->organisationId(),
-            'campaign_id'     => $campaignId,
+            'owner_type'      => $ownerType,
+            'owner_id'        => $ownerId,
             'link_hash'       => $hash,
             'original_url'    => $url,
             'label'           => $label,
@@ -191,7 +225,7 @@ final class LinkTracker
             return null;
         }
 
-        $link = $this->connection->table('campaign_links')
+        $link = $this->connection->table('tracked_links')
             ->where('id', '=', $linkId)
             ->where('organisation_id', '=', $organisationId)
             ->first();
@@ -213,7 +247,7 @@ final class LinkTracker
 
         return [
             'organisation_id' => $organisationId,
-            'campaign_id'     => (int) $link['campaign_id'],
+            'campaign_id'     => (string) $link['owner_type'] === 'campaign' ? (int) $link['owner_id'] : 0,
             'link_id'         => $linkId,
             'message_id'      => isset($payload['m']) ? (int) $payload['m'] : null,
             'contact_id'      => isset($payload['c']) ? (int) $payload['c'] : null,
@@ -316,7 +350,7 @@ final class LinkTracker
         $unique = !$this->connection->table('email_events')
             ->where('email_message_id', '=', $messageId)
             ->where('event_type', '=', 'click')
-            ->where('campaign_link_id', '=', $linkId)
+            ->where('tracked_link_id', '=', $linkId)
             ->exists();
 
         $recorded = $this->recordEvent(
@@ -386,7 +420,7 @@ final class LinkTracker
                 'provider'          => 'internal',
                 'provider_event_id' => $eventId,
                 'clicked_url'       => $url,
-                'campaign_link_id'  => $linkId,
+                'tracked_link_id'   => $linkId,
                 'ip_address'        => $ip,
                 'user_agent'        => $userAgent === null ? null : substr($userAgent, 0, 255),
                 'event_at'          => $now,
@@ -403,7 +437,7 @@ final class LinkTracker
     public function incrementLinkClicks(int $linkId, bool $unique): void
     {
         $this->connection->execute(
-            'UPDATE campaign_links SET click_count = click_count + 1'
+            'UPDATE tracked_links SET click_count = click_count + 1'
             . ($unique ? ', unique_click_count = unique_click_count + 1' : '')
             . ' WHERE id = ? AND organisation_id = ?',
             [$linkId, $this->tenant->organisationId()]
@@ -411,13 +445,19 @@ final class LinkTracker
     }
 
     /** @return array<int,array<string,mixed>> */
-    public function linksForCampaign(int $campaignId): array
+    public function linksFor(string $ownerType, int $ownerId): array
     {
         return $this->connection->select(
-            'SELECT * FROM campaign_links WHERE organisation_id = ? AND campaign_id = ?
+            'SELECT * FROM tracked_links WHERE organisation_id = ? AND owner_type = ? AND owner_id = ?
              ORDER BY click_count DESC, id',
-            [$this->tenant->organisationId(), $campaignId]
+            [$this->tenant->organisationId(), $ownerType, $ownerId]
         );
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function linksForCampaign(int $campaignId): array
+    {
+        return $this->linksFor('campaign', $campaignId);
     }
 
     /** @param array<string,mixed> $campaign */

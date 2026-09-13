@@ -440,7 +440,45 @@ The failure this prevents is not a clumsy sentence. It is a business owner
 repeating "that campaign brought in $4,200" to their accountant when nothing of
 the sort happened.
 
-## 16. Tracking and what it is worth
+## 16. Journeys
+
+A run is a row, not a call stack. Every step reads where the run is, does one
+thing, writes down where it went, and returns. Nothing is held in memory between
+steps, so a worker dying mid-journey loses at most one step, and a journey that
+waits three weeks costs nothing while it waits.
+
+Entering is cheap; stepping is not. `TriggerDispatcher` writes a run row and
+returns, so the HTTP request that created a contact never waits on an email, and
+importing 40,000 rows does not try to run 40,000 journeys inline. The scheduler
+advances runs, in a worker, like everything else that sends.
+
+Four properties, each with a test:
+
+- **A run cannot loop forever.** Steps are counted and capped. A journey wired in
+  a circle fails loudly instead of quietly consuming a worker and the
+  organisation's sending quota.
+- **A contact cannot be re-entered by accident.** Re-entry is off unless the
+  author turns it on, and even then there is a cooldown and a lifetime cap. A
+  contact re-tagged nightly by an import must not be emailed nightly — and a tag
+  re-applied to somebody who already has it is not an event at all.
+- **Every step is explainable**, including the ones that did nothing. "Why did my
+  customer not get that email" is the question people actually ask, and a silent
+  non-send is indistinguishable from a bug.
+- **A broken step stops that run, not the journey.** One contact with a deleted
+  tag should not stop three hundred others progressing, and a misconfigured
+  journey must never roll back the contact record that triggered it.
+
+An automation is the easiest place in a product like this to grow a second,
+laxer sending path: it runs unattended, recipients arrive one at a time, and
+nobody is watching. So it does not get one. `SendEmailAction` calls the same
+`ComplianceService`, at the same moment relative to the provider, as a campaign
+does. Journey conditions go through `SegmentCompiler`, so a condition and a smart
+list mean the same thing and neither can reach a field the registry never
+declared. The action list is short and everything on it is reversible or
+visible: nothing deletes a contact, clears a suppression or changes consent,
+because 3am unattended is the worst possible place for an irreversible action.
+
+## 17. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

@@ -98,6 +98,12 @@ final class Application
 
         $c->instance(self::class, $this);
 
+        // The container resolves itself. Without this, anything that asks for a
+        // Container gets a brand new empty one through autowiring — every
+        // singleton missing, and confusing "cannot resolve $config of Connection"
+        // errors a long way from the cause.
+        $c->instance(Container::class, $c);
+
         $c->singleton(Config::class, function (): Config {
             $config = new Config($this->basePath . '/config');
             $config->load();

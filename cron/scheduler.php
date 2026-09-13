@@ -76,15 +76,22 @@ $schedule('campaigns.dispatch', 900, static function () use ($container, $logger
     }
 });
 
-// Wake automation runs whose timer has elapsed (phase 4 executes them).
-$schedule('automations.timers', 300, static function () use ($connection, $clock, $logger): void {
-    $waiting = (int) $connection->scalar(
-        "SELECT COUNT(*) FROM automation_runs WHERE status = 'waiting' AND resume_at IS NOT NULL AND resume_at <= ?",
-        [$clock->nowString()]
-    );
+/*
+ * Move automation runs along.
+ *
+ * Every journey step happens here or in a worker, never in a web request. A run
+ * is a row: this picks up the ones whose timer has elapsed, binds their tenant,
+ * advances each until it waits again, and moves on. A journey that waits three
+ * weeks costs nothing while it waits.
+ */
+$schedule('automations.run', 600, static function () use ($container, $logger): void {
+    /** @var App\Automation\AutomationService $automations */
+    $automations = $container->make(App\Automation\AutomationService::class);
 
-    if ($waiting > 0) {
-        $logger->info('Automation runs ready to resume', ['count' => $waiting]);
+    $moved = $automations->advanceDueRuns();
+
+    if ($moved > 0) {
+        $logger->info('Automation runs advanced', ['runs' => $moved]);
     }
 });
 
@@ -156,6 +163,20 @@ if ((int) $clock->now()->format('i') % 15 === 0) {
         }
 
         $tenant->clear();
+    });
+
+    // Journeys that start from the calendar rather than from an event:
+    // "a customer has gone quiet", "it is somebody's birthday". Nothing fires
+    // them, so something has to go looking.
+    $schedule('automations.scheduled_triggers', 900, static function () use ($container, $logger): void {
+        /** @var App\Automation\AutomationService $automations */
+        $automations = $container->make(App\Automation\AutomationService::class);
+
+        $started = $automations->fireScheduledTriggers();
+
+        if ($started > 0) {
+            $logger->info('Scheduled journeys started', ['runs' => $started]);
+        }
     });
 
     // Re-check domains whose DNS was still propagating, so a customer who

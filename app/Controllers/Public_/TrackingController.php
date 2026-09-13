@@ -22,7 +22,7 @@ use App\Support\TenantContext;
  * comes from inside that signed payload — the one place tenancy is derived from a
  * URL, and only because we signed it ourselves and verify it before reading it.
  *
- * THE REDIRECT IS NOT AN OPEN REDIRECT. The token carries a `campaign_links` row
+ * THE REDIRECT IS NOT AN OPEN REDIRECT. The token carries a `tracked_links` row
  * id, never a destination. The URL comes from that row — something an
  * authenticated user put into a campaign — and is re-checked to be http(s)
  * before we hand a `Location` header to a browser. A forged token fails the
@@ -41,6 +41,7 @@ final class TrackingController
         private readonly LinkTracker $links,
         private readonly OrganisationRepository $organisations,
         private readonly ContactRepository $contacts,
+        private readonly \App\Automation\TriggerDispatcher $triggers,
         private readonly TenantContext $tenant,
         private readonly Config $config,
         private readonly Clock $clock,
@@ -78,11 +79,20 @@ final class TrackingController
         }
 
         $this->withTenant((int) $resolved['organisation_id'], function () use ($resolved, $request): void {
-            if ($this->links->recordClick($resolved, $request->ip(), $request->userAgent())
-                && ($resolved['contact_id'] ?? 0) > 0
+            if (!$this->links->recordClick($resolved, $request->ip(), $request->userAgent())
+                || ($resolved['contact_id'] ?? 0) <= 0
             ) {
-                $this->contacts->touchEngagement((int) $resolved['contact_id'], 'click');
+                return;
             }
+
+            $this->contacts->touchEngagement((int) $resolved['contact_id'], 'click');
+
+            // Only on a first-counted click, so a mail scanner fetching the link
+            // three times does not start three journeys.
+            $this->triggers->fire('email_clicked', (int) $resolved['contact_id'], [
+                'campaign_id' => $resolved['campaign_id'] ?? 0,
+                'reference'   => (string) $resolved['url'],
+            ]);
         });
 
         // 302 rather than 301: a permanent redirect would be cached by the

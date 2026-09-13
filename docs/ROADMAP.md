@@ -64,16 +64,16 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | AI assistant command interface (tool-restricted)    | TODO |
 | Recommendation panel                                | DONE — measured recommendations; AI reviews stored alongside |
 
-## Phase 4 — Automation
+## Phase 4 — Automation  ✅ DONE
 
 | Item | Status |
 |------|--------|
-| Journey schema (nodes, connections, runs, logs) | DONE (schema) |
-| Trigger registry + dispatcher                   | TODO |
-| Condition evaluator (reuses segment compiler)    | TODO |
-| Action executors (email, tag, list, contact, lead, task, webhook, wait) | TODO |
-| Timer processing in scheduler                    | TODO |
-| Lead recovery journey templates                  | TODO |
+| Journey schema (nodes, connections, runs, logs) | DONE |
+| Trigger registry + dispatcher                   | DONE |
+| Condition evaluator (reuses segment compiler)    | DONE |
+| Action executors (email, tag, list, contact, task, notify, webhook, wait) | DONE |
+| Timer processing in scheduler                    | DONE |
+| Journey templates (welcome, lead recovery, win back) | DONE |
 
 ## Phase 5 — Revenue
 

@@ -352,9 +352,10 @@ final class AnalyticsTest extends TestCase
 
     private function link(int $campaignId, string $url, int $clicks, int $people): void
     {
-        $this->connection->table('campaign_links')->insert([
+        $this->connection->table('tracked_links')->insert([
             'organisation_id'    => $this->tenant->organisationId(),
-            'campaign_id'        => $campaignId,
+            'owner_type'         => 'campaign',
+            'owner_id'           => $campaignId,
             'link_hash'          => substr(hash('sha256', $url), 0, 40),
             'original_url'       => $url,
             'click_count'        => $clicks,

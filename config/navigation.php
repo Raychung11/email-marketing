@@ -50,11 +50,11 @@ return [
         ],
     ],
     [
-        'label'      => 'Automation',
+        'label'      => 'Journeys',
         'icon'       => 'repeat',
         'permission' => 'automations.view',
         'children'   => [
-            ['label' => 'Journeys',        'route' => '/automations',       'permission' => 'automations.view', 'phase' => 4],
+            ['label' => 'Journeys',        'route' => '/automations',       'permission' => 'automations.view'],
             ['label' => 'Triggers',        'route' => '/automations/triggers', 'permission' => 'automations.view', 'phase' => 4],
             ['label' => 'Automation logs', 'route' => '/automations/logs',  'permission' => 'automations.view', 'phase' => 4],
         ],
