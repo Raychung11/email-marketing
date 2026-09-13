@@ -3,6 +3,10 @@
 Target: a single Linux VPS to start, horizontally splittable later (web nodes,
 worker nodes, managed MySQL, managed Redis) with no code change.
 
+> Deploying to **shared hosting** instead? There is no Redis, no Supervisor, and
+> the database is MariaDB rather than MySQL 8, so almost none of this page
+> applies. Follow [DEPLOY_HOSTINGER.md](DEPLOY_HOSTINGER.md).
+
 ## 1. Server requirements
 
 - Ubuntu 22.04/24.04 or Debian 12

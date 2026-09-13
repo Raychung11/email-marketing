@@ -1,0 +1,53 @@
+Cron jobs for Hostinger  (hPanel → Advanced → Cron Jobs)
+========================================================
+
+Replace  /home/u822252863/domains/YOUR-DOMAIN/app  with the real path. Find it
+by running `pwd` over SSH from the application directory.
+
+Both jobs are required, and there are exactly two. Do not add a third copy of
+either "to make it faster" — sending the same campaign twice is a real outcome.
+
+
+1. Scheduler — every minute
+---------------------------
+Starts due campaigns, advances journeys, retries failures, refreshes reports.
+Every job inside it takes a named expiring lock, so a minute that overlaps the
+previous run cannot double-execute anything.
+
+    /usr/bin/php /home/u822252863/domains/YOUR-DOMAIN/app/cron/scheduler.php >> /home/u822252863/domains/YOUR-DOMAIN/app/storage/logs/scheduler.log 2>&1
+
+If your plan will not accept a one-minute schedule, five minutes is fine. The
+only effect is that a campaign scheduled for 10:00 may begin at 10:04.
+
+
+2. Queue worker — every minute
+------------------------------
+Does the actual sending. --max-seconds ends the shift before the next minute
+begins, and --lock makes an overlapping run exit immediately instead of
+starting a second worker beside the first.
+
+    /usr/bin/php /home/u822252863/domains/YOUR-DOMAIN/app/workers/worker.php --queue=email_high_priority,email_transactional,email_marketing,email_retry,automation,webhooks,imports,analytics --max-seconds=55 --max-jobs=400 --lock=worker_default >> /home/u822252863/domains/YOUR-DOMAIN/app/storage/logs/worker.log 2>&1
+
+The queues are drained strictly left to right, so a password reset never waits
+behind a 50,000-recipient campaign.
+
+On a five-minute schedule use --max-seconds=290 instead.
+
+
+Checking it works
+-----------------
+    tail -f storage/logs/scheduler.log
+    tail -f storage/logs/worker.log
+
+`php deploy/hostinger/preflight.php` fails if the scheduler has not run in the
+last fifteen minutes, which is the fastest way to notice cron is not running at
+all. Without cron the site still loads and still looks fine — it simply never
+sends anything.
+
+
+Log size
+--------
+Both logs append for ever and shared hosting has no logrotate. Once a month:
+
+    : > storage/logs/scheduler.log
+    : > storage/logs/worker.log

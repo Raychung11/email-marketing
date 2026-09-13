@@ -118,7 +118,10 @@ storage/         logs/, uploads/, framework/
 workers/         worker.php
 cron/            console.php, scheduler.php
 tests/           Unit/, Feature/, Security/, run.php
-docs/            ARCHITECTURE, DATABASE, COMPLIANCE, ROADMAP, DEPLOYMENT
+docs/            ARCHITECTURE, DATABASE, COMPLIANCE, ROADMAP, DEPLOYMENT,
+                 DEPLOY_HOSTINGER
+deploy/          crontab + supervisor examples, hostinger/ (env template,
+                 deploy.sh, preflight.php, cron.txt, fallback .htaccess)
 ```
 
 ### One deliberate deviation from the brief
@@ -334,6 +337,12 @@ uses today because it has no dependencies.
 
 Full runbook — Nginx, Supervisor, cron, SES, backups, monitoring and a production
 security checklist — in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+**Shared hosting** (Hostinger and similar) has no Redis and no Supervisor, and
+runs MariaDB rather than MySQL 8. That path is a separate step-by-step:
+[`docs/DEPLOY_HOSTINGER.md`](docs/DEPLOY_HOSTINGER.md), with the scripts it uses
+in [`deploy/hostinger/`](deploy/hostinger/) — a preflight checker that asks the
+live site whether it is serving `.env`, and a deploy script that runs over SSH.
 
 ### Backups
 

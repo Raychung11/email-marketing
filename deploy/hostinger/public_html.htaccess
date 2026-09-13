@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# FALLBACK ONLY.
+#
+# Use this when the repository has to live inside public_html because the
+# document root cannot be changed. Copy it to public_html/.htaccess:
+#
+#     cp deploy/hostinger/public_html.htaccess .htaccess
+#
+# The preferred arrangement is the repository OUTSIDE the web root with
+# public_html symlinked to its public/ directory, because then the source is
+# not merely hidden by rules that must all keep working — it is not there at
+# all. See docs/DEPLOY_HOSTINGER.md.
+#
+# If you use this file, run `php deploy/hostinger/preflight.php` afterwards.
+# It asks the live site for /.env and fails if anything comes back.
+# ---------------------------------------------------------------------------
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Deny first, rewrite second. Order matters: a rule that forwards a request
+    # into public/ before these have run would serve the file.
+    RewriteRule ^(app|bootstrap|config|cron|database|deploy|docs|resources|routes|storage|tests|workers|vendor)(/|$) - [F,L]
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # Everything else is served from public/, which is the only directory that
+    # is supposed to be reachable.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
+
+# Belt and braces: if mod_rewrite is ever disabled, these still hold. A
+# misconfiguration that turns off rewriting must not turn the site into a
+# directory listing of its own source code.
+<FilesMatch "^\.env|^composer\.(json|lock)$|\.(md|sqlite|log|yml|yaml|sh|dist)$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+</IfModule>
