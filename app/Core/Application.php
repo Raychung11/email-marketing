@@ -214,6 +214,11 @@ final class Application
 
         $c->singleton(TenantContext::class, static fn (): TenantContext => new TenantContext());
 
+        $c->singleton(
+            \App\Support\Heartbeat::class,
+            static fn (): \App\Support\Heartbeat => new \App\Support\Heartbeat(base_path('storage/framework'))
+        );
+
         /*
          * These three carry per-request state — the resolved identity, and the
          * actor stamped onto log entries. They MUST be singletons: two instances

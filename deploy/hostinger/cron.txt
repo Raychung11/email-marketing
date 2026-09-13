@@ -57,10 +57,18 @@ Checking it works
     tail -f storage/logs/scheduler.log
     tail -f storage/logs/worker.log
 
-`php deploy/hostinger/preflight.php` fails if the scheduler has not run in the
-last fifteen minutes, which is the fastest way to notice cron is not running at
-all. Without cron the site still loads and still looks fine — it simply never
-sends anything.
+Both logs stay empty on a healthy server, which is correct: the scheduler and
+the worker log through the application logger, and a production LOG_LEVEL
+discards routine messages. An empty scheduler.log is not a problem. Errors do
+appear there.
+
+To ask whether cron is actually running, use:
+
+    php deploy/hostinger/preflight.php
+
+It reads a heartbeat each process writes on every run, and fails if either has
+not run in the last fifteen minutes. Without cron the site still loads and still
+looks fine — it simply never sends anything.
 
 The scripts rotate their own logs once they pass 10MB, since shared hosting has
 no logrotate.

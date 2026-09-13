@@ -233,4 +233,9 @@ while (!$shouldStop) {
 
 $logger->info('Worker stopped', ['worker' => $workerId, 'processed' => $processed]);
 
+$container->make(App\Support\Heartbeat::class)->record('worker', [
+    'processed' => $processed,
+    'queues'    => $queues,
+]);
+
 exit(0);

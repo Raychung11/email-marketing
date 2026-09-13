@@ -344,9 +344,17 @@ if ((int) $clock->now()->format('i') === 0) {
     });
 }
 
-$logger->info('Scheduler tick complete', [
-    'ran'         => $ran,
-    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+$durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+$logger->info('Scheduler tick complete', ['ran' => $ran, 'duration_ms' => $durationMs]);
+
+// Written every tick, including the quiet ones. This is the only reliable
+// answer to "is cron actually running?" — the log cannot answer it, because a
+// tick with nothing to do produces no log line, and a production LOG_LEVEL
+// discards the ones it does produce.
+$container->make(App\Support\Heartbeat::class)->record('scheduler', [
+    'ran'         => count($ran),
+    'duration_ms' => $durationMs,
 ]);
 
 exit(0);

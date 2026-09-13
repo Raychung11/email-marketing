@@ -310,24 +310,48 @@ if ($appUrl !== '' && function_exists('curl_init')) {
 
 // ----------------------------------------------------------------- scheduler
 
-$schedulerLog = $root . '/storage/logs/scheduler.log';
+// Both processes write a heartbeat every run. Do NOT go back to reading a log's
+// modification time for this: a scheduler tick with nothing to do writes no
+// output at all, and a production LOG_LEVEL discards what it does write, so the
+// log looks untouched on a perfectly healthy server and this check reports a
+// dead cron that is running fine every minute.
+$heartbeat = new \App\Support\Heartbeat($root . '/storage/framework');
 
-if (!is_file($schedulerLog)) {
-    check(
-        'Cron has run the scheduler',
-        'warn',
-        'no scheduler.log yet',
-        'Add the cron jobs from deploy/hostinger/cron.txt in hPanel → Advanced → Cron Jobs.'
-    );
-} else {
-    $age = time() - (int) filemtime($schedulerLog);
+$expectations = [
+    'scheduler' => [
+        'label' => 'Cron has run the scheduler',
+        'stale' => 900,
+        'fix'   => 'Without the scheduler nothing sends, no journey advances and no '
+            . 'report refreshes. Add the jobs from deploy/hostinger/cron.txt in '
+            . 'hPanel → Advanced → Cron Jobs, choosing Custom rather than PHP.',
+    ],
+    'worker' => [
+        'label' => 'Cron has run the queue worker',
+        'stale' => 900,
+        'fix'   => 'Without the worker, campaigns are queued and then sit there. Same '
+            . 'place: hPanel → Advanced → Cron Jobs.',
+    ],
+];
+
+foreach ($expectations as $name => $expectation) {
+    $age = $heartbeat->secondsSince($name);
+
+    if ($age === null) {
+        check(
+            $expectation['label'],
+            'warn',
+            'has never run',
+            $expectation['fix']
+        );
+
+        continue;
+    }
 
     check(
-        'Cron has run the scheduler',
-        $age < 900 ? 'pass' : 'fail',
-        'last run ' . (int) round($age / 60) . ' minutes ago',
-        'Without cron nothing sends, no journey advances and no report refreshes. '
-        . 'Check hPanel → Advanced → Cron Jobs.'
+        $expectation['label'],
+        $age < $expectation['stale'] ? 'pass' : 'fail',
+        $age < 60 ? 'last run just now' : 'last run ' . (int) round($age / 60) . ' minutes ago',
+        $expectation['fix']
     );
 }
 

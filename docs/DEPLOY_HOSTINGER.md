@@ -267,9 +267,17 @@ host that relocates PHP does not silently stop your sending.
 After a couple of minutes:
 
 ```bash
-tail storage/logs/scheduler.log
-php deploy/hostinger/preflight.php     # "Cron has run the scheduler" should pass
+php deploy/hostinger/preflight.php | grep -i cron
 ```
+
+Both `Cron has run the scheduler` and `Cron has run the queue worker` should
+pass.
+
+`storage/logs/scheduler.log` and `worker.log` stay **empty** on a healthy
+server — both processes log through the application logger, and a production
+`LOG_LEVEL` discards routine messages. Empty is the expected state; errors still
+land there. Liveness comes from the heartbeat each process writes on every run,
+which is what the preflight reads.
 
 ---
 
@@ -324,7 +332,8 @@ ordinary forms rather than erroring, so there is no rush.
 | `500` on every page | Usually `storage/` not writable (`chmod -R 755 storage`) or `APP_KEY` empty. |
 | Site shows a file listing, or `index.php` as text | Document root is wrong, or PHP is not running for this domain. Step 5. |
 | Login says the page expired | `SESSION_SECURE=true` while the site is on plain http. Get the certificate working, or set it to false until then. |
-| Campaign stuck at "sending" | The worker cron is not running. `tail storage/logs/worker.log`. |
+| Campaign stuck at "sending" | The worker cron is not running. `php deploy/hostinger/preflight.php \| grep -i worker`. |
+| `scheduler.log` is empty | Expected. Routine messages are below the production log level; liveness is the heartbeat, not the log. |
 | Nothing ever leaves "scheduled" | The scheduler cron is not running. |
 | Emails send but nothing is tracked | `APP_URL` is wrong. Open pixels and click links are built from it. |
 | Old code after a deploy | The web server's OPcache. Wait a minute, or restart PHP in hPanel. |
