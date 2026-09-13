@@ -136,6 +136,25 @@ final class AiInsightService
     // -------------------------------------------------------- the figure check
 
     /**
+     * Check prose against a set of facts, dropping any sentence that quotes a
+     * figure we did not supply.
+     *
+     * Exposed so the assistant uses this check rather than growing a second copy
+     * of it — and a second copy is exactly how one of them quietly stops
+     * checking.
+     *
+     * @param array<string,mixed> $facts
+     * @return array{text:string,dropped:int}
+     */
+    public function verifyProse(string $text, array $facts): array
+    {
+        $dropped = [];
+        $checked = $this->checkedSentences($text, $this->allowedNumbers($facts), $dropped);
+
+        return ['text' => $checked, 'dropped' => count($dropped)];
+    }
+
+    /**
      * Drop anything containing a number we did not supply.
      *
      * @param array<string,mixed> $data

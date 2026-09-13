@@ -607,7 +607,36 @@ The opt-out instruction is appended in code rather than trusted to whoever wrote
 the message — it is the one line nobody remembers to type, and the fastest route
 to a complaint when it is missing.
 
-## 21. Tracking and what it is worth
+## 21. The assistant
+
+The only place in the product where a model decides what to look at rather than
+being handed a fixed set of facts. Three decisions make that safe, and each one
+is a thing a product like this is usually tempted to do differently.
+
+**It picks from a menu; it does not write a query.** `AssistantTools` is the
+assistant's entire world: seven methods, each answering one fixed question with
+a number the product already computes, scoped to the bound tenant by the
+services underneath. There is no field name, table, filter or fragment of SQL
+anywhere on the path, and no general query tool to be talked into misusing. A
+tool the model invents is simply not called; a number of days is coerced into
+`1..365` whatever arrives.
+
+**It cannot do anything, only say things.** There is no write tool to argue
+about. When it concludes something should happen, it says so and links to the
+screen where a person does it — and those links are allow-listed, because a
+model writing its own URL is a way to put an arbitrary link in front of somebody
+who trusts the product. A test scripts it claiming to have unsubscribed everyone
+and sent a campaign, then asserts nothing changed.
+
+**Every number is checked before it is shown**, reusing `verifyProse()` from the
+post-mortem rather than growing a second copy — a second copy is how one of them
+quietly stops checking. An assistant is the easiest place to produce a
+confident, wrong figure, because it sounds like it has been looking things up.
+
+Two rounds at most: ask for what you need, get it, answer. An open-ended loop
+would spend somebody's monthly allowance on one question.
+
+## 22. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

@@ -190,6 +190,12 @@ return static function (Router $router): void {
          * nothing skips review: an AI-written campaign lands in the same draft
          * state as one somebody typed and needs the same approval.
          */
+        $router->get('/ai/assistant', StudioController::class . '@assistant', [
+            RequirePermission::class . ':ai.use',
+        ]);
+        $router->post('/ai/assistant', StudioController::class . '@ask', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
+        ]);
         $router->get('/ai/studio', StudioController::class . '@index', [
             RequirePermission::class . ':ai.use',
         ]);

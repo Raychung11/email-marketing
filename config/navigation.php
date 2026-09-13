@@ -98,7 +98,7 @@ return [
         'icon'       => 'sparkles',
         'permission' => 'ai.use',
         'children'   => [
-            ['label' => 'AI Assistant',      'route' => '/ai/assistant',       'permission' => 'ai.use', 'phase' => 3],
+            ['label' => 'Ask a question',    'route' => '/ai/assistant',       'permission' => 'ai.use'],
             ['label' => 'Recommendations',   'route' => '/ai/recommendations', 'permission' => 'ai.use', 'phase' => 3],
             ['label' => 'Customer groups',   'route' => '/ai/segments',        'permission' => 'ai.use', 'phase' => 3],
             ['label' => 'Campaign insights', 'route' => '/ai/insights',        'permission' => 'ai.use', 'phase' => 3],

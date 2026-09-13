@@ -51,7 +51,7 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Deliverability dashboard + reputation alerts          | DONE |
 | Campaign reporting (funnel, top links, skip reasons)  | DONE |
 
-## Phase 3 — AI
+## Phase 3 — AI  ✅ DONE
 
 | Item | Status |
 |------|--------|
@@ -61,7 +61,7 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Subject line / preview text generation              | DONE |
 | AI segment generator → validated `SegmentDefinition` | DONE |
 | AI campaign post-mortem analysis                    | DONE |
-| AI assistant command interface (tool-restricted)    | TODO |
+| AI assistant (read-only tools, cannot act)           | DONE |
 | Recommendation panel                                | DONE — measured recommendations; AI reviews stored alongside |
 
 ## Phase 4 — Automation  ✅ DONE

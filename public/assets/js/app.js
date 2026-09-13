@@ -354,6 +354,87 @@
     sync();
   }
 
+  /* --------------------------------------------------------- AI assistant */
+
+  (function () {
+    var go = document.getElementById('askGo');
+    if (!go) { return; }
+
+    var input  = document.getElementById('question');
+    var answer = document.getElementById('askAnswer');
+
+    document.addEventListener('click', function (event) {
+      var example = event.target.closest('[data-ask]');
+      if (!example) { return; }
+
+      event.preventDefault();
+      input.value = example.getAttribute('data-ask');
+      go.click();
+    });
+
+    go.addEventListener('click', function () {
+      var question = (input.value || '').trim();
+      if (!question) { input.focus(); return; }
+
+      go.disabled = true;
+      answer.hidden = false;
+      answer.innerHTML = '<p class="muted small" style="margin:0">Looking at your figures…</p>';
+
+      var body = new FormData();
+      body.append('_token', token());
+      body.append('question', question);
+
+      fetch('/ai/assistant', {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          go.disabled = false;
+
+          if (!data || !data.answer) {
+            answer.innerHTML = '<p class="small muted" style="margin:0">' +
+              'I could not answer that one. The reporting screens have the numbers.</p>';
+            return;
+          }
+
+          var html = '<p>' + escapeHtml(data.answer) + '</p>';
+
+          if ((data.suggestions || []).length) {
+            html += '<p class="small" style="margin-bottom:4px"><strong>You might want to:</strong></p><ul class="small">';
+            data.suggestions.forEach(function (suggestion) {
+              html += '<li><a href="' + escapeHtml(suggestion.where) + '">' +
+                escapeHtml(suggestion.label) + '</a></li>';
+            });
+            html += '</ul>';
+          }
+
+          if ((data.used || []).length) {
+            html += '<p class="tiny muted">Looked at: ' +
+              escapeHtml(data.used.join(', ').replace(/_/g, ' ')) + '.</p>';
+          }
+
+          // Said out loud rather than quietly shortened, so a missing sentence
+          // never reads as the assistant simply having less to say.
+          if (data.dropped > 0) {
+            html += '<p class="tiny" style="color:#b45309">We removed ' + data.dropped +
+              ' sentence(s) that quoted figures we cannot account for.</p>';
+          }
+
+          html += '<p class="tiny muted" style="margin-bottom:0">' +
+            escapeHtml(data.disclaimer || '') + '</p>';
+
+          answer.innerHTML = html;
+        })
+        .catch(function () {
+          go.disabled = false;
+          answer.innerHTML = '<p class="small muted" style="margin:0">Could not reach the AI just now.</p>';
+        });
+    });
+  })();
+
   /* ------------------------------------------------ AI campaign explanation */
 
   document.addEventListener('click', function (event) {

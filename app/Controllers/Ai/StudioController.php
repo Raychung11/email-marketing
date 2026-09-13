@@ -33,6 +33,8 @@ final class StudioController extends Controller
         private readonly AiCampaignService $studio,
         private readonly AiSegmentService $aiSegments,
         private readonly AiInsightService $insights,
+        private readonly \App\Services\AiAssistantService $assistant,
+        private readonly \App\AI\AssistantTools $tools,
         private readonly TemplateService $templates,
         private readonly TemplateRenderer $renderer,
     ) {
@@ -98,6 +100,23 @@ final class StudioController extends Controller
             '/campaigns/' . $campaignId,
             'Saved as a draft. Read it over, then send it for checking when you are happy.'
         );
+    }
+
+    /** GET /ai/assistant */
+    public function assistant(Request $request): Response
+    {
+        return $this->render('ai.assistant', [
+            'available' => $this->assistant->isAvailable(),
+            'tools'     => $this->tools->catalogue(),
+        ]);
+    }
+
+    /** POST /ai/assistant — ask it something. */
+    public function ask(Request $request): Response
+    {
+        $data = $this->validate($request, ['question' => 'required|max:500']);
+
+        return Response::json($this->assistant->ask((string) $data['question']));
     }
 
     /** POST /campaigns/{id}/ai/review — explain how a campaign went. */
