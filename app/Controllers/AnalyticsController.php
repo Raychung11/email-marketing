@@ -23,6 +23,9 @@ final class AnalyticsController extends Controller
         private readonly AnalyticsService $analytics,
         private readonly DashboardService $dashboard,
         private readonly SendingDomainRepository $domains,
+        private readonly \App\Services\AttributionService $attribution,
+        private readonly \App\Services\EventTrackingService $events,
+        private readonly \App\Services\LeadService $leads,
         private readonly TenantContext $tenant,
     ) {
         parent::__construct($view, $session, $config);
@@ -61,6 +64,33 @@ final class AnalyticsController extends Controller
             'report'  => $this->analytics->inboxDelivery($days),
             'days'    => $days,
             'domains' => $this->domains->all(),
+        ]);
+    }
+
+    /** GET /analytics/revenue */
+    public function revenue(Request $request): Response
+    {
+        $days = $this->window($request, 'campaigns');
+
+        return $this->render('analytics.revenue', [
+            'summary'    => $this->attribution->summary($days),
+            'campaigns'  => $this->attribution->byCampaign($days),
+            'monthly'    => $this->attribution->monthly(12),
+            'leads'      => $this->leads->stats($days),
+            'days'       => $days,
+            'currency'   => $this->tenant->currency(),
+        ]);
+    }
+
+    /** GET /analytics/engagement */
+    public function engagement(Request $request): Response
+    {
+        $days = $this->window($request, 'inbox');
+
+        return $this->render('analytics.engagement', [
+            'events'  => $this->events->popular($days),
+            'report'  => $this->analytics->inboxDelivery($days),
+            'days'    => $days,
         ]);
     }
 

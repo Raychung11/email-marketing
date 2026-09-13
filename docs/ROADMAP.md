@@ -75,16 +75,16 @@ Status legend: **DONE** shipped · **PARTIAL** scaffolded/interfaces in place ·
 | Timer processing in scheduler                    | DONE |
 | Journey templates (welcome, lead recovery, win back) | DONE |
 
-## Phase 5 — Revenue
+## Phase 5 — Revenue  ✅ DONE
 
 | Item | Status |
 |------|--------|
-| Pipelines, stages, leads, stage history, tasks, notes | DONE (schema) |
-| Lead pipeline UI + lead scoring rules                 | TODO |
-| Website event tracking snippet + `/api/v1/events`     | TODO |
-| Conversion API                                        | TODO |
-| Revenue attribution (last click, configurable window) | TODO |
-| BI dashboard + Chart.js reports                       | TODO |
+| Pipelines, stages, leads, stage history, tasks, notes | DONE |
+| Lead pipeline UI + explainable lead scoring           | DONE |
+| Website event tracking snippet + `/api/v1/events`     | DONE |
+| Conversion API (idempotent on external id)            | DONE |
+| Revenue attribution (last/first click, configurable window) | DONE |
+| Revenue + engagement reports with Chart.js            | DONE |
 
 ## Phase 6 — Advanced
 

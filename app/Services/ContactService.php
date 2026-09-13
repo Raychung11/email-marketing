@@ -113,6 +113,28 @@ final class ContactService
         return $id;
     }
 
+    /**
+     * Find somebody by address, or add them.
+     *
+     * Used by the paths where a person arrives as a side effect — a website
+     * enquiry, a form, an API event. Consent is deliberately NOT granted here:
+     * filling in a contact form is a request to be answered, not permission to
+     * be marketed to, and treating the two as the same is how a business ends up
+     * with a list nobody agreed to.
+     *
+     * @param array<string,mixed> $attributes
+     */
+    public function findOrCreateByEmail(string $email, array $attributes = []): int
+    {
+        $existing = $this->contacts->findByEmail($email);
+
+        if ($existing !== null) {
+            return (int) $existing['id'];
+        }
+
+        return $this->create(array_filter(array_merge($attributes, ['email' => $email]), static fn ($v): bool => $v !== null));
+    }
+
     /** @param array<string,mixed> $attributes */
     public function update(int $contactId, array $attributes): void
     {

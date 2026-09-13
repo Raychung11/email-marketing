@@ -18,6 +18,7 @@ use App\Controllers\Crm\SuppressionController;
 use App\Controllers\Crm\TagController;
 use App\Controllers\DashboardController;
 use App\Controllers\HealthController;
+use App\Controllers\LeadController;
 use App\Controllers\Marketing\CampaignController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
@@ -107,6 +108,26 @@ return static function (Router $router): void {
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
+        // ------------------------------------------------------------ leads
+        $router->get('/leads', LeadController::class . '@index', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->get('/leads/pipeline', LeadController::class . '@pipeline', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->post('/leads', LeadController::class . '@store', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+        $router->get('/leads/{id}', LeadController::class . '@show', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->post('/leads/{id}/stage', LeadController::class . '@moveStage', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+        $router->post('/leads/{id}/responded', LeadController::class . '@markResponded', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+
         // --------------------------------------------------------- journeys
         $router->get('/automations', AutomationController::class . '@index', [
             RequirePermission::class . ':automations.view',
@@ -167,6 +188,12 @@ return static function (Router $router): void {
             RequirePermission::class . ':analytics.view',
         ]);
         $router->get('/analytics/deliverability', AnalyticsController::class . '@deliverability', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/revenue', AnalyticsController::class . '@revenue', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/engagement', AnalyticsController::class . '@engagement', [
             RequirePermission::class . ':analytics.view',
         ]);
 

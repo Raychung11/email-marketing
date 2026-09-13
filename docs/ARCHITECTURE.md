@@ -478,7 +478,59 @@ declared. The action list is short and everything on it is reversible or
 visible: nothing deletes a contact, clears a suppression or changes consent,
 because 3am unattended is the worst possible place for an irreversible action.
 
-## 17. Tracking and what it is worth
+## 17. Attribution, and what it is honest to claim
+
+Attribution is a decision, not a fact, and the honest way to handle a decision is
+to record it when it is made and stand by it. The attributed campaign is written
+onto the conversion row together with the model and the window that produced it,
+so changing the window next month does not silently rewrite last month. A
+business that cannot reconcile two printouts of the same quarter stops trusting
+the tool.
+
+The default is last click within a configurable window — the least sophisticated
+model available, chosen because it is the one a customer can check by hand:
+"they pressed the link in Tuesday's email, then booked on Thursday". A model
+nobody can verify is a model nobody should believe.
+
+A click always beats an open. An open may mean a mail server fetched an image.
+
+Attributed revenue is always reported *next to* the total, never instead of it.
+"£8,400 of £31,000" is an honest claim; "email generated £8,400" invites the
+reader to think email did all the work.
+
+Conversions are idempotent on `(organisation, external_id, type)`, because every
+payment gateway retries its webhook and the day's takings must not double.
+
+### Website events
+
+Two rules hold throughout, because this is the part of the product most likely
+to become a privacy problem:
+
+**Nothing is identified until somebody identifies themselves.** Anonymous
+browsing is stored against a random id the visitor's own browser generated.
+It becomes a person only when they click a link in an email or fill in a form —
+a deliberate act by them, not a fingerprint we assembled. There is no IP or
+user-agent matching anywhere on this path. Earlier anonymous events are
+backfilled at that point, which is the whole reason for keeping the id.
+
+**Query strings are stripped before storage.** Real websites put session tokens,
+password reset links and email addresses in them, and none of that belongs in an
+analytics table. UTM values are passed separately and kept on purpose.
+
+The snippet authenticates with a key scoped to `events:write` — it can post
+events and read nothing. A key that sits in every page's HTML is a public key
+whatever it is called, so it gets the access that assumption deserves.
+
+### Lead scoring
+
+A score is a sorting aid, not a verdict: its only job is to put the enquiry most
+worth ringing at the top of somebody's morning. So every lead carries the list of
+reasons it scored what it scored, each with its points and a sentence saying why.
+A number nobody can account for is a number people ignore, and then they work the
+list by date again. "Big job" is measured against that business's own average won
+value, so it means something local rather than something invented.
+
+## 18. Tracking and what it is worth
 
 Opens are recorded because customers expect the number, and are treated as weak
 evidence everywhere they are reported: mail privacy proxies pre-fetch images, so

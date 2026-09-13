@@ -60,12 +60,12 @@ return [
         ],
     ],
     [
-        'label'      => 'Lead management',
+        'label'      => 'Enquiries',
         'icon'       => 'target',
         'permission' => 'leads.view',
         'children'   => [
-            ['label' => 'Leads',         'route' => '/leads',          'permission' => 'leads.view',   'phase' => 5],
-            ['label' => 'Lead pipeline', 'route' => '/leads/pipeline', 'permission' => 'leads.view',   'phase' => 5],
+            ['label' => 'Enquiries',     'route' => '/leads',          'permission' => 'leads.view'],
+            ['label' => 'Pipeline',      'route' => '/leads/pipeline', 'permission' => 'leads.view'],
             ['label' => 'Tasks',         'route' => '/tasks',          'permission' => 'leads.view',   'phase' => 5],
             ['label' => 'Win back lost leads', 'route' => '/leads/recovery', 'permission' => 'leads.manage', 'phase' => 4],
         ],
@@ -87,9 +87,9 @@ return [
         'children'   => [
             ['label' => 'Overview',            'route' => '/analytics',              'permission' => 'analytics.view'],
             ['label' => 'How campaigns did',   'route' => '/analytics/campaigns',   'permission' => 'analytics.view'],
-            ['label' => 'Who reads your email', 'route' => '/analytics/engagement',  'permission' => 'analytics.view', 'phase' => 2],
+            ['label' => 'Who reads your email', 'route' => '/analytics/engagement',  'permission' => 'analytics.view'],
             ['label' => 'Conversion',          'route' => '/analytics/conversion',   'permission' => 'analytics.view', 'phase' => 5],
-            ['label' => 'Sales from email',    'route' => '/analytics/revenue',      'permission' => 'analytics.view', 'phase' => 5],
+            ['label' => 'Sales from email',    'route' => '/analytics/revenue',      'permission' => 'analytics.view'],
             ['label' => 'Inbox delivery',      'route' => '/analytics/deliverability', 'permission' => 'analytics.view'],
         ],
     ],
