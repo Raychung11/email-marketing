@@ -216,15 +216,77 @@ switch ($command) {
         // command line is written to your shell history in plain text.
         $password = bin2hex(random_bytes(9));
 
+        // Clearing the lock is the point. Five bad attempts locks the account for
+        // fifteen minutes and login is then refused whatever the password is, so
+        // handing someone a correct password while leaving them locked out is not
+        // a recovery command — it is a second wrong answer.
         $users->update((int) $user['id'], [
-            'password_hash' => $container->make(App\Core\Hash::class)->make($password),
+            'password_hash'       => $container->make(App\Core\Hash::class)->make($password),
+            'password_changed_at' => gmdate('Y-m-d H:i:s'),
+            'failed_login_count'  => 0,
+            'locked_until'        => null,
         ]);
 
+        $wasLocked = ($user['locked_until'] ?? null) !== null
+            || ((int) ($user['failed_login_count'] ?? 0)) > 0;
+
         $out('Password changed for ' . $email);
+
+        if ($wasLocked) {
+            $out('Account unlocked (it had ' . (int) ($user['failed_login_count'] ?? 0) . ' failed attempts).');
+        }
+
         $out('New password: ' . $password);
         $out('');
         $out('Sign in with it, then change it under Profile. It is in this');
         $out('terminal\'s scrollback until you clear it.');
+        break;
+
+    case 'user:list':
+        // "Which account am I supposed to be signing in as?" is unanswerable from
+        // the login screen, and reaching for phpMyAdmin to find out is a long way
+        // round for a question this small.
+        $rows = $container->make(Connection::class)
+            ->table('users')
+            ->orderBy('id')
+            ->limit(50)
+            ->get();
+
+        if ($rows === []) {
+            $out('No user accounts exist yet.');
+            $out('Create one: php cron/console.php org:create "Your Business" you@example.com');
+            break;
+        }
+
+        $out(sprintf('%-4s %-38s %-20s %s', 'ID', 'EMAIL', 'LAST SIGNED IN', 'STATUS'));
+        $out(str_repeat('-', 86));
+
+        $nowUtc = gmdate('Y-m-d H:i:s');
+
+        foreach ($rows as $row) {
+            $lockedUntil = (string) ($row['locked_until'] ?? '');
+            $failures    = (int) ($row['failed_login_count'] ?? 0);
+
+            $status = match (true) {
+                ($row['deleted_at'] ?? null) !== null   => 'deleted',
+                $lockedUntil !== '' && $lockedUntil > $nowUtc
+                    => 'LOCKED until ' . $lockedUntil . ' UTC',
+                $failures > 0                            => $failures . ' failed attempt' . ($failures === 1 ? '' : 's'),
+                default                                  => 'ok',
+            };
+
+            $out(sprintf(
+                '%-4s %-38s %-20s %s',
+                (string) $row['id'],
+                (string) $row['email'],
+                (string) (($row['last_login_at'] ?? '') ?: 'never'),
+                $status
+            ));
+        }
+
+        $out('');
+        $out('Times are UTC. To reset a password and clear a lock:');
+        $out('  php cron/console.php user:password <email>');
         break;
 
     case 'mail:check':
@@ -343,7 +405,8 @@ switch ($command) {
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',
             'org:create'       => 'Create an organisation with an owner account',
-            'user:password'    => 'Set a new password for a user, when email cannot reach them',
+            'user:list'        => 'List accounts, when each last signed in, and whether any are locked',
+            'user:password'    => 'Set a new password for a user and clear any lockout',
             'down / up'        => 'Toggle maintenance mode',
         ] as $name => $description) {
             $out(sprintf('  %-18s %s', $name, $description));

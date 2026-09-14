@@ -427,4 +427,39 @@ final class SmokeTest extends TestCase
         $this->assertStatus(302, $response);
         $this->assertSame('/dashboard', $response->headers()['Location'] ?? '');
     }
+
+    public function testClearingALockIsPartOfResettingAPassword(): void
+    {
+        $org = $this->createOrganisation();
+
+        /** @var \App\Repositories\UserRepository $users */
+        $users = $this->container->make(\App\Repositories\UserRepository::class);
+
+        // Five bad attempts locks the account, and login is then refused whatever
+        // the password is. A recovery path that fixes the password and leaves the
+        // lock in place hands someone a correct password that still does not work.
+        $users->update($org['user_id'], [
+            'failed_login_count' => 5,
+            'locked_until'       => gmdate('Y-m-d H:i:s', time() + 900),
+        ]);
+
+        $locked = $users->findById($org['user_id']);
+        $this->assertNotNull($locked['locked_until'], 'The account really is locked to begin with');
+
+        // What cron/console.php user:password does.
+        $users->update($org['user_id'], [
+            'password_hash'      => $this->container->make(\App\Core\Hash::class)->make('a-brand-new-password'),
+            'failed_login_count' => 0,
+            'locked_until'       => null,
+        ]);
+
+        $recovered = $users->findById($org['user_id']);
+
+        $this->assertNull($recovered['locked_until'], 'The lock is gone');
+        $this->assertSame(0, (int) $recovered['failed_login_count'], 'And so is the failure count');
+        $this->assertTrue(
+            $this->container->make(\App\Core\Hash::class)->check('a-brand-new-password', $recovered['password_hash']),
+            'The new password works'
+        );
+    }
 }
