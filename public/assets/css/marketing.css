@@ -1,0 +1,240 @@
+/*
+ * Landing page.
+ *
+ * app.css says it is restrained on purpose because it dresses a tool people use
+ * for hours. This is the opposite job — one page, one read — so it takes the
+ * same palette and tokens and spends them differently: a bigger type scale, more
+ * air, and one accent used sparingly enough that it still means something.
+ */
+
+.marketing { background: var(--surface); font-size: 16px; }
+.marketing h1, .marketing h2, .marketing h3 { letter-spacing: -0.021em; line-height: 1.15; margin: 0; }
+
+.m-wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+/* ------------------------------------------------------------------- nav */
+.m-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.m-nav__inner { display: flex; align-items: center; gap: 28px; height: 64px; }
+.m-logo { font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: -0.02em; }
+.m-nav__links { display: flex; gap: 24px; margin-left: 8px; }
+.m-nav__links a { color: var(--ink-soft); font-size: 14.5px; }
+.m-nav__links a:hover { color: var(--ink); }
+.m-nav__actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
+.m-link { color: var(--ink-soft); font-size: 14.5px; }
+.m-link:hover { color: var(--ink); }
+
+.m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  font-size: 14.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.m-btn--primary { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+.m-btn--primary:hover { background: #1a44b8; }
+.m-btn--ghost { border-color: var(--line-strong); color: var(--ink); background: #fff; }
+.m-btn--ghost:hover { border-color: var(--ink-muted); }
+.m-btn--lg { padding: 13px 24px; font-size: 15.5px; }
+
+/* ------------------------------------------------------------------ hero */
+.m-hero { padding: 86px 0 72px; position: relative; overflow: hidden; }
+.m-hero::before {
+  content: "";
+  position: absolute;
+  inset: -40% 30% auto -10%;
+  height: 620px;
+  background: radial-gradient(closest-side, rgba(29, 78, 216, .09), transparent);
+  pointer-events: none;
+}
+.m-hero__inner { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+.m-eyebrow {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 20px;
+}
+.m-hero h1 { font-size: 46px; font-weight: 700; margin-bottom: 18px; }
+.m-lede { font-size: 18px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 28px; max-width: 34em; }
+.m-cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.m-cta-note { font-size: 13.5px; color: var(--ink-muted); margin-top: 16px; }
+
+/* Schematic, not a screenshot. It shows how the audience check actually works;
+   the figures are illustrative and labelled as such. */
+.m-figure {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+.m-figure__title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+.m-figure__sub { font-size: 12.5px; color: var(--ink-muted); margin: 0 0 16px; }
+.m-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); margin-bottom: 14px; }
+.m-bar span { display: block; height: 100%; }
+.m-rows { display: grid; gap: 9px; }
+.m-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.m-dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.m-row__label { color: var(--ink-soft); }
+.m-row__value { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.m-figure__foot { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-muted); }
+
+/* --------------------------------------------------------------- sections */
+.m-section { padding: 76px 0; border-top: 1px solid var(--line); }
+.m-section--tint { background: var(--canvas); }
+.m-section__head { max-width: 42em; margin-bottom: 40px; }
+.m-section h2 { font-size: 30px; font-weight: 700; margin-bottom: 14px; }
+.m-section__head p { font-size: 17px; color: var(--ink-soft); margin: 0; }
+
+.m-grid { display: grid; gap: 20px; }
+.m-grid--3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.m-grid--2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+.m-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+.m-card h3 { font-size: 16.5px; font-weight: 650; margin-bottom: 8px; }
+.m-card p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+.m-trades { display: flex; flex-wrap: wrap; gap: 8px; }
+.m-trade {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+}
+
+/* ------------------------------------------------------------ refusals */
+.m-refusal { display: flex; gap: 14px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.m-refusal:last-child { border-bottom: 0; }
+.m-refusal__mark {
+  flex: 0 0 auto;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--success-soft);
+  color: var(--success);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  margin-top: 2px;
+}
+.m-refusal h3 { font-size: 16px; font-weight: 650; margin-bottom: 5px; }
+.m-refusal p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+/* ---------------------------------------------------------------- steps */
+.m-steps { counter-reset: step; display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.m-step { position: relative; padding-top: 44px; }
+.m-step::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  top: 0; left: 0;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  display: grid; place-items: center;
+  font-size: 14px; font-weight: 700;
+}
+.m-step h3 { font-size: 16.5px; font-weight: 650; margin-bottom: 7px; }
+.m-step p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+/* -------------------------------------------------------------- pricing */
+.m-currency { display: inline-flex; gap: 2px; background: var(--canvas); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.m-currency button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.m-currency button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+.m-plans { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); align-items: start; }
+.m-plan {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.m-plan--featured { border-color: var(--accent); box-shadow: var(--shadow); position: relative; }
+.m-plan__tag {
+  position: absolute; top: -11px; left: 26px;
+  background: var(--accent); color: #fff;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  border-radius: 999px; padding: 4px 11px;
+}
+.m-plan h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+.m-plan__desc { font-size: 14px; color: var(--ink-soft); margin: 0 0 20px; min-height: 3.2em; }
+.m-plan__price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 20px; }
+.m-plan__amount { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.m-plan__per { font-size: 14px; color: var(--ink-muted); }
+.m-plan__limits { list-style: none; margin: 0 0 24px; padding: 0; display: grid; gap: 9px; }
+.m-plan__limits li { font-size: 14px; color: var(--ink-soft); display: flex; gap: 9px; align-items: flex-start; }
+.m-plan__limits li::before { content: "✓"; color: var(--success); font-weight: 700; flex: 0 0 auto; }
+.m-plan .m-btn { margin-top: auto; width: 100%; }
+
+.m-pricing-note { margin-top: 26px; font-size: 13.5px; color: var(--ink-muted); max-width: 46em; }
+
+/* ------------------------------------------------------------------ faq */
+.m-faq { display: grid; gap: 0; max-width: 46em; }
+.m-faq details { border-bottom: 1px solid var(--line); padding: 18px 0; }
+.m-faq summary { font-size: 16px; font-weight: 650; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 12px; }
+.m-faq summary::-webkit-details-marker { display: none; }
+.m-faq summary::after { content: "+"; margin-left: auto; color: var(--ink-muted); font-size: 19px; font-weight: 400; }
+.m-faq details[open] summary::after { content: "–"; }
+.m-faq p { margin: 12px 0 0; color: var(--ink-soft); font-size: 14.5px; max-width: 44em; }
+
+/* ------------------------------------------------------------- final cta */
+.m-final { background: var(--ink); color: #fff; padding: 74px 0; text-align: center; }
+.m-final h2 { font-size: 30px; font-weight: 700; margin-bottom: 14px; color: #fff; }
+.m-final p { font-size: 17px; color: #cbd5e1; margin: 0 auto 28px; max-width: 38em; }
+.m-final .m-btn--primary { background: #fff; color: var(--ink); }
+.m-final .m-btn--primary:hover { background: #e8eaf0; }
+
+/* --------------------------------------------------------------- footer */
+.m-foot { border-top: 1px solid var(--line); padding: 40px 0 28px; background: var(--surface); }
+.m-foot__inner { display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; align-items: flex-start; }
+.m-foot__note { margin: 4px 0 0; font-size: 14px; color: var(--ink-muted); }
+.m-foot__links { display: flex; flex-wrap: wrap; gap: 20px; }
+.m-foot__links a { font-size: 14px; color: var(--ink-soft); }
+.m-foot__legal { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-muted); }
+
+/* -------------------------------------------------------------- narrow */
+@media (max-width: 860px) {
+  .m-hero__inner { grid-template-columns: 1fr; gap: 40px; }
+  .m-hero h1 { font-size: 34px; }
+  .m-lede { font-size: 17px; }
+  .m-section h2, .m-final h2 { font-size: 25px; }
+  .m-nav__links { display: none; }
+  .m-hero { padding: 56px 0 48px; }
+  .m-section { padding: 56px 0; }
+}

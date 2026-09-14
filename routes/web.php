@@ -48,7 +48,7 @@ use App\Middleware\Throttle;
 
 return static function (Router $router): void {
     // ---------------------------------------------------------------- public
-    $router->get('/', static fn (): \App\Core\Response => \App\Core\Response::redirect('/dashboard'));
+    $router->get('/', \App\Controllers\MarketingController::class . '@home');
 
     $router->get('/health', HealthController::class . '@live');
     $router->get('/health/ready', HealthController::class . '@ready');

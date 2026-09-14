@@ -383,4 +383,48 @@ final class SmokeTest extends TestCase
             'The enhancement is actually loaded on the sign-in page'
         );
     }
+
+    public function testTheLandingPageIsPublicAndQuotesTheRealPriceCatalogue(): void
+    {
+        $page = $this->get('/');
+
+        $this->assertStatus(200, $page, 'A signed-out visitor gets the landing page, not a redirect to login');
+
+        $body = $page->body();
+
+        // Prices are rendered from config/plans.php rather than written into the
+        // template, because a price that is right on the marketing page and wrong
+        // in the billing catalogue is worse than no marketing page at all.
+        /** @var \App\Core\Config $config */
+        $config = $this->container->make(\App\Core\Config::class);
+
+        /** @var array<string,array<string,mixed>> $plans */
+        $plans = $config->get('plans.plans', []);
+
+        $this->assertTrue($plans !== [], 'There is a plan catalogue to quote');
+
+        foreach ($plans as $plan) {
+            $this->assertContainsString((string) $plan['name'], $body, 'Every public plan is listed');
+
+            foreach ($plan['price'] as $currency => $minorUnits) {
+                $this->assertContainsString(
+                    number_format($minorUnits / 100, 0),
+                    $body,
+                    'The ' . $currency . ' price comes from the catalogue'
+                );
+            }
+        }
+    }
+
+    public function testSomebodyAlreadySignedInGoesStraightToTheProduct(): void
+    {
+        $org = $this->createOrganisation();
+        $this->actingAs($org['user_id'], $org['organisation_id']);
+
+        $response = $this->get('/');
+
+        // The sales pitch is for people who have not bought yet.
+        $this->assertStatus(302, $response);
+        $this->assertSame('/dashboard', $response->headers()['Location'] ?? '');
+    }
 }
