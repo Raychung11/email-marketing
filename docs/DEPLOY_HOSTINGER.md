@@ -115,64 +115,111 @@ You want: `Hi Raychung11/email-marketing! You've successfully authenticated,
 but GitHub does not provide shell access.` That message is a success, despite
 how it reads.
 
-## 4. Clone the code — outside the web root
+## 4. Clone the code — where no domain owns it
+
+**Not** inside a domain's folder. Deleting a domain in hPanel deletes
+`~/domains/<that-domain>/` and everything under it — which, if the application
+lives there, means the code, the `.env` and the `APP_KEY` that decrypts every
+stored credential. That is a very quiet way to lose a system, and it is likely to
+happen on the day you tidy up a temporary domain you think is unused.
 
 ```bash
-cd ~/domains/steelblue-mule-213168.hostingersite.com
-git clone git@github.com:Raychung11/email-marketing.git app
-cd app
+mkdir -p ~/apps
+cd ~/apps
+git clone git@github.com:Raychung11/email-marketing.git aigrowthhub
+cd aigrowthhub
 git checkout claude/brave-johnson-bf6c90
 ```
 
 You now have:
 
 ```
-~/domains/steelblue-mule-213168.hostingersite.com/
-├── app/             ← the code, not reachable from the internet
-│   └── public/      ← the only directory that should be
-└── public_html/     ← currently the default Hostinger placeholder
+~/apps/aigrowthhub/          ← the code, owned by no domain
+├── public/                  ← the only directory that should be reachable
+├── .env                     ← credentials and APP_KEY
+└── storage/                 ← logs, uploads, heartbeats
 ```
 
 ## 5. Point the web root at `public/`
 
-Replace `public_html` with a link to the application's `public` directory:
+Your site's document root becomes a symlink to the application's `public`
+directory. For a subdomain created in hPanel with a custom folder, that is the
+folder hPanel made:
 
 ```bash
-cd ~/domains/steelblue-mule-213168.hostingersite.com
-mv public_html public_html.old
-ln -s app/public public_html
-ls -la public_html            # should show -> app/public
+cd ~/domains/rsresearch.my/public_html      # wherever hPanel put the docroot
+rm -rf aigrowthhub                          # Hostinger's placeholder
+ln -s ~/apps/aigrowthhub/public aigrowthhub
+ls -la aigrowthhub                          # -> /home/…/apps/aigrowthhub/public
 ```
 
-This is the arrangement to prefer. Everything except `public/` is then
-*physically absent* from the web root, rather than present but hidden behind
-rules that all have to keep working.
+For a primary domain it is the same idea:
 
-Once the site is up and you are happy, `rm -rf public_html.old`.
+```bash
+cd ~/domains/<your-domain>
+mv public_html public_html.old
+ln -s ~/apps/aigrowthhub/public public_html
+```
+
+Everything except `public/` is then *physically absent* from the web root,
+rather than present but hidden behind rules that all have to keep working.
+
+Once the site is up and you are happy, remove the `.old` directory.
 
 <details>
 <summary>If the symlink does not work</summary>
 
 Some configurations refuse to follow symlinked document roots. In that case put
-the repository inside `public_html` instead and use the supplied rules:
+the repository inside the document root and use the supplied rules:
 
 ```bash
-cd ~/domains/steelblue-mule-213168.hostingersite.com
-rm public_html && mv public_html.old public_html
-cd public_html
+cd ~/domains/<your-domain>/public_html
 git clone git@github.com:Raychung11/email-marketing.git .
 git checkout claude/brave-johnson-bf6c90
 cp deploy/hostinger/public_html.htaccess .htaccess
 ```
 
-This works, but every protection now depends on that `.htaccess` being read.
-Step 9 matters even more if you go this way.
+This works, but every protection now depends on that `.htaccess` being read, and
+you are back to the domain owning your code. Step 9 matters even more if you go
+this way.
+</details>
+
+<details>
+<summary>Moving an existing install out of a domain folder</summary>
+
+If the application is already inside `~/domains/<something>/`, move it — after
+taking a backup:
+
+```bash
+./deploy/hostinger/backup.sh && ls -lh ~/backups/aigrowthhub/
+
+mkdir -p ~/apps
+mv ~/domains/<something>/app ~/apps/aigrowthhub
+
+cd ~/domains/<your-domain>/public_html
+rm -f <docroot-folder> && ln -s ~/apps/aigrowthhub/public <docroot-folder>
+```
+
+Then **update every cron entry** in hPanel to the new path. They reference the
+old one and will stop silently — the site keeps working, and nothing sends.
+Prove they are running from the new location by deleting the evidence and
+waiting for it to come back:
+
+```bash
+cd ~/apps/aigrowthhub
+rm -f storage/framework/*.heartbeat
+sleep 130
+grep -H . storage/framework/*.heartbeat
+```
+
+Nothing in the application knows it moved: `deploy.sh` and the cron wrappers
+resolve their own location at runtime.
 </details>
 
 ## 6. Configure the application
 
 ```bash
-cd ~/domains/steelblue-mule-213168.hostingersite.com/app
+cd ~/apps/aigrowthhub
 cp deploy/hostinger/env.production.example .env
 chmod 600 .env
 nano .env
@@ -284,7 +331,7 @@ which is what the preflight reads.
 **hPanel → Advanced → Cron Jobs**, Custom, once a day:
 
 ```
-/home/u822252863/domains/steelblue-mule-213168.hostingersite.com/app/deploy/hostinger/backup.sh
+/home/u822252863/apps/aigrowthhub/deploy/hostinger/backup.sh
 ```
 
 Minute `20`, Hour `18`, everything else `Every (*)` — 02:20 Malaysia time, and
@@ -333,7 +380,7 @@ and the moment you find out is the moment you needed it.
 
 ```bash
 ssh -p 65002 u822252863@<host> \
-  'cd ~/domains/steelblue-mule-213168.hostingersite.com/app && ./deploy/hostinger/deploy.sh'
+  'cd ~/apps/aigrowthhub && ./deploy/hostinger/deploy.sh'
 ```
 
 `deploy.sh` puts the site in maintenance mode, pulls, migrates, fixes

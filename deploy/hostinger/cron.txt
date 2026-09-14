@@ -17,7 +17,7 @@ Starts due campaigns, advances journeys, retries failures, refreshes reports.
 Every job inside takes a named expiring lock, so a minute that overlaps the
 previous run cannot double-execute anything.
 
-    /home/u822252863/domains/YOUR-DOMAIN/app/deploy/hostinger/cron-scheduler.sh
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/cron-scheduler.sh
 
 
 2. Queue worker — every minute
@@ -25,7 +25,7 @@ previous run cannot double-execute anything.
 Does the actual sending, draining the queues in strict priority order so a
 password reset never waits behind a 50,000-recipient campaign.
 
-    /home/u822252863/domains/YOUR-DOMAIN/app/deploy/hostinger/cron-worker.sh
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/cron-worker.sh
 
 
 3. Database backup — once a day
@@ -34,7 +34,7 @@ Dumps the database, gzips it, and keeps a fortnight. Written OUTSIDE the web
 root, because a database dump under public_html is your entire customer list one
 URL away.
 
-    /home/u822252863/domains/YOUR-DOMAIN/app/deploy/hostinger/backup.sh
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/backup.sh
 
 Set Minute to 20, Hour to 18, and leave Day, Month and Weekday on "Every (*)".
 That is 02:20 in Malaysia — late enough to be quiet, and not on the hour, where
