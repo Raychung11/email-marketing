@@ -361,4 +361,26 @@ final class SmokeTest extends TestCase
             'A crashed run must not wedge the scheduler for ever'
         );
     }
+
+    public function testTheLoginPageOffersToRevealThePasswordWithoutRequiringJavascript(): void
+    {
+        $page = $this->get('/login');
+
+        $this->assertStatus(200, $page);
+
+        // The field itself is a plain password input in the markup. The reveal
+        // button is built by script, so a browser without JavaScript shows an
+        // ordinary field rather than a dead control that does nothing.
+        $this->assertContainsString('type="password"', $page->body());
+        $this->assertNotContainsString(
+            'class="password-toggle"',
+            $page->body(),
+            'The button is created at runtime, not written into the HTML'
+        );
+        $this->assertContainsString(
+            '/assets/js/password-toggle.js',
+            $page->body(),
+            'The enhancement is actually loaded on the sign-in page'
+        );
+    }
 }

@@ -193,6 +193,40 @@ switch ($command) {
         }
         break;
 
+    case 'user:password':
+        // The reset flow in the app emails a link. That is the right design, and
+        // it is useless in exactly the situation where you need it most: no
+        // sending domain verified yet, SES still in sandbox, or the mail
+        // configuration itself is what is broken. This is the way back in for
+        // whoever has SSH.
+        $email = $args[0] ?? '';
+
+        if ($email === '') {
+            $fail('Usage: php cron/console.php user:password owner@example.com');
+        }
+
+        $users = $container->make(App\Repositories\UserRepository::class);
+        $user  = $users->findByEmail($email);
+
+        if ($user === null) {
+            $fail('No user with that email address.');
+        }
+
+        // Generated rather than taken as an argument: a password typed on the
+        // command line is written to your shell history in plain text.
+        $password = bin2hex(random_bytes(9));
+
+        $users->update((int) $user['id'], [
+            'password_hash' => $container->make(App\Core\Hash::class)->make($password),
+        ]);
+
+        $out('Password changed for ' . $email);
+        $out('New password: ' . $password);
+        $out('');
+        $out('Sign in with it, then change it under Profile. It is in this');
+        $out('terminal\'s scrollback until you clear it.');
+        break;
+
     case 'mail:check':
         // Proves the credentials, the region and the signing all work, without
         // sending anything. Every failure here is one you want to find now
@@ -309,6 +343,7 @@ switch ($command) {
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',
             'org:create'       => 'Create an organisation with an owner account',
+            'user:password'    => 'Set a new password for a user, when email cannot reach them',
             'down / up'        => 'Toggle maintenance mode',
         ] as $name => $description) {
             $out(sprintf('  %-18s %s', $name, $description));

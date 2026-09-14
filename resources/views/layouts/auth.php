@@ -35,5 +35,6 @@
     </p>
   </div>
 </div>
+<script src="/assets/js/password-toggle.js" defer></script>
 </body>
 </html>
