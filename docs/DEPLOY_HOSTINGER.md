@@ -279,6 +279,54 @@ server — both processes log through the application logger, and a production
 land there. Liveness comes from the heartbeat each process writes on every run,
 which is what the preflight reads.
 
+## 11. Backups
+
+**hPanel → Advanced → Cron Jobs**, Custom, once a day:
+
+```
+/home/u822252863/domains/steelblue-mule-213168.hostingersite.com/app/deploy/hostinger/backup.sh
+```
+
+Minute `20`, Hour `18`, everything else `Every (*)` — 02:20 Malaysia time, and
+off the hour where every other cron job on a shared server is queueing.
+
+It dumps the database, gzips it, verifies the result, and only then deletes
+anything older than a fortnight. Dumps land in `~/backups/aigrowthhub/` at mode
+600, **outside the web root** — a database dump under `public_html` is your whole
+customer list one URL away.
+
+Two details that matter on shared hosting:
+
+- The password is passed in a `0600` defaults file, never on the command line.
+  Process arguments are readable by every other account on the machine.
+- `mysqldump | gzip` reports *gzip's* exit status, so a failed dump looks like a
+  success. The script passes mysqldump's own status back out through a file
+  descriptor. Without that, a broken backup silently overwrites a good one.
+
+Check it:
+
+```bash
+php deploy/hostinger/preflight.php | grep -i backed
+ls -lh ~/backups/aigrowthhub/
+```
+
+### Restoring
+
+```bash
+# Look before you leap — this replaces everything.
+gzip -dc ~/backups/aigrowthhub/<file>.sql.gz | head -40
+
+php cron/console.php down
+php cron/console.php db:credentials /tmp/restore.cnf
+gzip -dc ~/backups/aigrowthhub/<file>.sql.gz \
+  | mysql --defaults-extra-file=/tmp/restore.cnf u822252863_smartemail
+rm -f /tmp/restore.cnf
+php cron/console.php up
+```
+
+Practise it once on a spare database. A backup nobody has restored is a guess,
+and the moment you find out is the moment you needed it.
+
 ---
 
 ## Deploying changes after the first time

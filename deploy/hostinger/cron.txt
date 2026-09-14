@@ -28,8 +28,21 @@ password reset never waits behind a 50,000-recipient campaign.
     /home/u822252863/domains/YOUR-DOMAIN/app/deploy/hostinger/cron-worker.sh
 
 
-Set every dropdown — Minute, Hour, Day, Month, Weekday — to its "Every (*)"
-option, or pick "Every Minute" from Common Settings.
+3. Database backup — once a day
+-------------------------------
+Dumps the database, gzips it, and keeps a fortnight. Written OUTSIDE the web
+root, because a database dump under public_html is your entire customer list one
+URL away.
+
+    /home/u822252863/domains/YOUR-DOMAIN/app/deploy/hostinger/backup.sh
+
+Set Minute to 20, Hour to 18, and leave Day, Month and Weekday on "Every (*)".
+That is 02:20 in Malaysia — late enough to be quiet, and not on the hour, where
+every other cron job on a shared server is already queueing.
+
+
+For jobs 1 and 2, set every dropdown — Minute, Hour, Day, Month, Weekday — to
+its "Every (*)" option, or pick "Every Minute" from Common Settings.
 
 
 Why scripts rather than the full command
@@ -72,3 +85,19 @@ looks fine — it simply never sends anything.
 
 The scripts rotate their own logs once they pass 10MB, since shared hosting has
 no logrotate.
+
+
+Restoring a backup
+------------------
+    ls -lh ~/backups/aigrowthhub/
+
+    # Check what you are about to restore before you restore it
+    gzip -dc ~/backups/aigrowthhub/<file>.sql.gz | head -40
+
+    # Restore. This REPLACES the current data.
+    php cron/console.php down
+    gzip -dc ~/backups/aigrowthhub/<file>.sql.gz | mysql --defaults-extra-file=<(php cron/console.php db:credentials /dev/stdout) u822252863_smartemail
+    php cron/console.php up
+
+Practise this once, on a spare database, before you need it. A backup nobody has
+ever restored is a guess.

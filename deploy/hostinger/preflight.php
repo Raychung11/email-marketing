@@ -331,6 +331,15 @@ $expectations = [
         'fix'   => 'Without the worker, campaigns are queued and then sit there. Same '
             . 'place: hPanel → Advanced → Cron Jobs.',
     ],
+    // Two days rather than one: a daily backup that runs a few hours late is not
+    // a problem, but one that has not run since the day before yesterday is.
+    'backup' => [
+        'label' => 'Database backed up recently',
+        'stale' => 172800,
+        'fix'   => 'Add the daily backup job from deploy/hostinger/cron.txt. The '
+            . 'consent history in this database is your legal record and cannot be '
+            . 'reconstructed. Check storage/logs/backup.log for why it stopped.',
+    ],
 ];
 
 foreach ($expectations as $name => $expectation) {

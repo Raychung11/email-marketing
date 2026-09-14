@@ -242,6 +242,44 @@ switch ($command) {
         $out('terminal\'s scrollback until you clear it.');
         break;
 
+    case 'db:credentials':
+        // Writes a MySQL defaults file for mysqldump.
+        //
+        // Not for humans: it exists so backup.sh never has to put the password on
+        // a command line. Process arguments are world-readable on a shared host —
+        // `ps aux` from any other account on the machine would show it — and a
+        // password that leaks that way leaks to strangers.
+        $target = $args[0] ?? '';
+
+        if ($target === '') {
+            $fail('Usage: php cron/console.php db:credentials /path/to/file.cnf');
+        }
+
+        $dbConfig = (array) $container->make(Config::class)->get('database.connections.mysql', []);
+
+        // Create it empty and locked down BEFORE the secret goes in, so there is
+        // no instant where it exists and is readable.
+        if (@file_put_contents($target, '') === false) {
+            $fail('Could not write ' . $target);
+        }
+
+        @chmod($target, 0600);
+
+        $escape = static fn (string $value): string => '"' . addcslashes($value, '"\\') . '"';
+
+        file_put_contents($target, implode(PHP_EOL, [
+            '[client]',
+            'host = ' . $escape((string) ($dbConfig['host'] ?? '127.0.0.1')),
+            'port = ' . (int) ($dbConfig['port'] ?? 3306),
+            'user = ' . $escape((string) ($dbConfig['username'] ?? '')),
+            'password = ' . $escape((string) ($dbConfig['password'] ?? '')),
+            'default-character-set = ' . ((string) ($dbConfig['charset'] ?? 'utf8mb4')),
+            '',
+        ]));
+
+        $out((string) ($dbConfig['database'] ?? ''));
+        break;
+
     case 'user:list':
         // "Which account am I supposed to be signing in as?" is unanswerable from
         // the login screen, and reaching for phpMyAdmin to find out is a long way
