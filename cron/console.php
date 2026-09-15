@@ -426,6 +426,37 @@ switch ($command) {
 
         $out('');
         $out('Credentials, region and request signing all work.');
+
+        // "Verified" means three different things in an AWS account — the signup,
+        // the login's MFA, and whether SES will deliver to a given address while
+        // sandboxed. Only the third decides whether a test message arrives, and
+        // it is the one with no obvious place to look.
+        $identity = trim((string) ($args[0] ?? ''));
+
+        if ($identity !== '') {
+            $out('');
+            $out('Asking SES about ' . $identity . '...');
+
+            $status = $provider->validateIdentity($identity);
+
+            if ($status->error !== null && $status->error !== '') {
+                $out('  SES said: ' . $status->error);
+                $out('');
+                $out('  Not verified. In the AWS console, with the region set to '
+                    . (string) $container->make(Config::class)->get('mail.providers.ses.region')
+                    . ':');
+                $out('  SES → Identities → Create identity → Email address');
+                break;
+            }
+
+            $out($status->verified
+                ? '  Verified. This address can receive mail from your account.'
+                : '  Known to SES but not verified yet — check the inbox for the confirmation link.');
+
+            if ($status->dkimStatus !== 'not_checked') {
+                $out('  DKIM: ' . $status->dkimStatus);
+            }
+        }
         break;
 
     case 'help':
@@ -438,7 +469,7 @@ switch ($command) {
             'migrate:status'   => 'Show migration state',
             'db:seed'          => 'Run seeders (roles, permissions, plans, compliance rules)',
             'db:check'         => 'Verify core tables exist',
-            'mail:check'       => 'Verify the email provider credentials and read your live quota',
+            'mail:check'       => 'Verify provider credentials and quota; add an address to check if SES will deliver to it',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',
