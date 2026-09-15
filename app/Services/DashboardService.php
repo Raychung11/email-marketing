@@ -65,8 +65,12 @@ final class DashboardService
     {
         $row = $this->connection->selectOne(
             "SELECT
-                COUNT(*) AS sent,
-                SUM(CASE WHEN status IN ('delivered','opened','clicked') THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+                -- An open or a click proves the message arrived, even when the
+                -- provider's delivery notification never reached us. ('opened'
+                -- and 'clicked' are not message statuses.)
+                SUM(CASE WHEN status = 'delivered' OR opened_at IS NOT NULL OR clicked_at IS NOT NULL
+                         THEN 1 ELSE 0 END) AS delivered,
                 SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened,
                 SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS clicked,
                 SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) AS bounced,

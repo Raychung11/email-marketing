@@ -68,7 +68,7 @@ $exportQuery = http_build_query(array_filter($filters, static fn ($v): bool => $
           </select>
         </div>
         <div class="field">
-          <label for="suppressed">Suppression</label>
+          <label for="suppressed">Do-not-email</label>
           <select id="suppressed" name="suppressed" data-auto-submit>
             <option value="">Any</option>
             <option value="no" <?= $filters['suppressed'] === 'no' ? 'selected' : '' ?>>Not suppressed</option>

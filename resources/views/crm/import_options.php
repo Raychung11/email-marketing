@@ -44,7 +44,7 @@ $steps = ['Upload', 'Preview', 'Map', 'Validate', 'Consent', 'Duplicates', 'Impo
 
           <hr class="sep">
           <p class="tiny muted mb-0">
-            Whichever you choose, an existing suppression is never removed and the consent
+            Either way, nobody comes off your do-not-email list, and the permission
             declaration for this import is appended to each contact's consent history rather than
             replacing what is there.
           </p>

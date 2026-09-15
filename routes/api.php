@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Controllers\Api\ContactApiController;
+use App\Controllers\Api\EventApiController;
 use App\Core\Response;
 use App\Core\Router;
 use App\Middleware\AuthenticateApiKey;
@@ -24,6 +25,23 @@ return static function (Router $router): void {
             'version' => 'v1',
             'time'    => gmdate('c'),
         ]));
+
+        /*
+         * Website events and conversions.
+         *
+         * Separate scopes on purpose: the key a shop puts in its page source can
+         * post events and read nothing, so leaking it — which will happen, it is
+         * in the HTML — costs nobody their customer list.
+         */
+        $router->post('/events', EventApiController::class . '@store', [
+            AuthenticateApiKey::class . ':events:write',
+        ]);
+        $router->get('/events/known', EventApiController::class . '@known', [
+            AuthenticateApiKey::class . ':events:write',
+        ]);
+        $router->post('/conversions', EventApiController::class . '@storeConversion', [
+            AuthenticateApiKey::class . ':conversions:write',
+        ]);
 
         $router->get('/contacts', ContactApiController::class . '@index', [
             AuthenticateApiKey::class . ':contacts:read',

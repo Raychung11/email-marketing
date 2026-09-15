@@ -15,7 +15,7 @@ $org   = $organisation;
 
 <div class="page-head">
   <div>
-    <h1>Set up your account</h1>
+    <h1>Let's get you set up</h1>
     <p>Step <?= $step ?> of <?= (int) $progress['total'] ?> — <?= e((string) $progress['label']) ?></p>
   </div>
   <div class="page-head__actions">
@@ -59,7 +59,7 @@ $org   = $organisation;
                     <option value="<?= e($key) ?>" <?= ($org['industry'] ?? '') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
                   <?php endforeach; ?>
                 </select>
-                <div class="hint">Used to tailor AI suggestions and campaign templates.</div>
+                <div class="hint">So the wording we suggest sounds like your trade, not a tech company.</div>
               </div>
               <div class="field">
                 <label for="website">Website</label>
@@ -69,8 +69,8 @@ $org   = $organisation;
 
           <?php elseif ($step === 2): ?>
             <p class="small muted mt-0">
-              Country decides which marketing rules apply by default. Timezone decides how every
-              date in the product is displayed — storage is always UTC.
+              Your country decides which email rules we apply, and your timezone decides what
+              "9am" means when you schedule something. Both can be changed later.
             </p>
             <div class="grid-3">
               <div class="field">
@@ -101,9 +101,9 @@ $org   = $organisation;
 
           <?php elseif ($step === 3): ?>
             <div class="alert alert--warning">
-              <strong>This is a compliance requirement, not paperwork</strong>
-              US commercial marketing email must include a valid physical postal address, and a
-              campaign will not pass validation without one. It is rendered in every marketing footer.
+              <strong>The law requires this — it is not us being fussy</strong>
+              Every marketing email has to show a real street address you can receive post at. We
+              print it at the bottom of your emails for you. Without it we cannot let you send.
             </div>
             <div class="field">
               <label for="address_line1">Address line 1</label>

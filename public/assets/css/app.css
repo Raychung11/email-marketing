@@ -243,6 +243,32 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(29, 78, 216, .12);
 }
 input.is-invalid, select.is-invalid, textarea.is-invalid { border-color: var(--danger); }
+
+/* Show/hide password. The wrapper and button are created by
+   assets/js/password-toggle.js, so none of this renders without JavaScript. */
+.password-field { position: relative; display: block; }
+.password-field input { padding-right: 58px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.password-toggle:hover { color: var(--ink); }
+.password-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, .35);
+  color: var(--ink);
+}
 textarea { min-height: 92px; resize: vertical; }
 
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }

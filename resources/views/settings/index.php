@@ -2,7 +2,7 @@
 <?php $__view->startSection('content'); ?>
 
 <div class="page-head">
-  <div><h1>Settings</h1><p>Business details, compliance context and sender identity.</p></div>
+  <div><h1>Settings</h1><p>Your business details, where you operate, and who your email comes from.</p></div>
   <div class="page-head__actions">
     <a class="btn" href="/settings/brand">Brand profile</a>
     <a class="btn" href="/settings/custom-fields">Custom fields</a>
@@ -179,7 +179,7 @@
     </div>
     <p class="tiny muted mt-2 mb-0">
       New accounts start with a conservative daily limit. It increases as the account establishes a
-      sending history with low bounce and complaint rates — this protects deliverability for every
+      history of sending clean email that people want — this keeps the inbox open for every
       sender on the platform, including you.
     </p>
   </div>

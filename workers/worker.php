@@ -11,6 +11,16 @@ declare(strict_types=1);
  * voluntarily after --max-jobs or when memory grows, and Supervisor restarts it,
  * which is how a long-running PHP process stays healthy.
  *
+ * Shared hosting has no Supervisor, so there cron plays its part instead:
+ *
+ *   php workers/worker.php --queue=... --max-seconds=55 --lock=worker_marketing
+ *
+ * --max-seconds makes the worker end its own shift before the next cron minute
+ * starts, and --lock makes an overlapping minute exit immediately rather than
+ * run a second worker alongside the first. Both are needed: without the lock a
+ * slow job silently doubles the number of workers every minute until the
+ * account hits its process limit.
+ *
  * Several queues can be given comma-separated. They are drained strictly left to
  * right, so transactional mail never waits behind a 100k marketing blast.
  */
@@ -25,8 +35,9 @@ use App\Queue\PermanentFailure;
 use App\Queue\QueueDriver;
 use App\Queue\QueueManager;
 use App\Queue\Queueable;
+use App\Services\SchedulerLock;
 
-$options = getopt('', ['queue::', 'sleep::', 'max-jobs::', 'memory::', 'once']);
+$options = getopt('', ['queue::', 'sleep::', 'max-jobs::', 'memory::', 'once', 'max-seconds::', 'lock::']);
 
 $app       = Application::bootConsole(dirname(__DIR__));
 $container = $app->container();
@@ -49,7 +60,41 @@ $sleep      = max(0, (int) ($options['sleep'] ?? $config->get('queue.worker.slee
 $maxJobs    = max(0, (int) ($options['max-jobs'] ?? $config->get('queue.worker.max_jobs', 500)));
 $memoryCap  = (int) ($options['memory'] ?? $config->get('queue.worker.memory_limit_mb', 256));
 $runOnce    = isset($options['once']);
+$maxSeconds = max(0, (int) ($options['max-seconds'] ?? 0));
+$lockName   = trim((string) ($options['lock'] ?? ''));
 $workerId   = gethostname() . ':' . getmypid();
+$deadline   = $maxSeconds > 0 ? microtime(true) + $maxSeconds : null;
+
+/** @var SchedulerLock|null $locks */
+$locks = null;
+
+if ($lockName !== '') {
+    $locks = $container->make(SchedulerLock::class);
+
+    // The lock must outlive the shift, or the next cron minute would start a
+    // second worker while this one is still finishing a job. A job that runs
+    // past the grace period is the one case where two workers can overlap, and
+    // that is survivable: claiming a job is atomic, so the worst case is an
+    // idle second process, not a duplicate send.
+    $lockTtl = ($maxSeconds > 0 ? $maxSeconds : $config->get('queue.worker.timeout', 120)) + 30;
+
+    if (!$locks->acquire($lockName, (int) $lockTtl, $workerId)) {
+        $logger->info('Worker exiting: another run still holds the lock.', [
+            'worker' => $workerId,
+            'lock'   => $lockName,
+        ]);
+
+        exit(0);
+    }
+}
+
+$releaseLock = static function () use ($locks, $lockName): void {
+    $locks?->release($lockName);
+};
+
+// A fatal error or a kill must not leave the lock held until it expires, or the
+// queue stops moving for the rest of the TTL.
+register_shutdown_function($releaseLock);
 
 $shouldStop = false;
 
@@ -84,6 +129,10 @@ while (!$shouldStop) {
 
     if ($job === null) {
         if ($runOnce) {
+            break;
+        }
+
+        if ($deadline !== null && microtime(true) >= $deadline) {
             break;
         }
 
@@ -157,6 +206,14 @@ while (!$shouldStop) {
         break;
     }
 
+    if ($deadline !== null && microtime(true) >= $deadline) {
+        $logger->info('Worker reached the end of its shift; exiting for cron to start the next one.', [
+            'worker'    => $workerId,
+            'processed' => $processed,
+        ]);
+        break;
+    }
+
     if ($maxJobs > 0 && $processed >= $maxJobs) {
         $logger->info('Worker reached its job limit; exiting for a clean restart.', [
             'worker'    => $workerId,
@@ -175,5 +232,10 @@ while (!$shouldStop) {
 }
 
 $logger->info('Worker stopped', ['worker' => $workerId, 'processed' => $processed]);
+
+$container->make(App\Support\Heartbeat::class)->record('worker', [
+    'processed' => $processed,
+    'queues'    => $queues,
+]);
 
 exit(0);

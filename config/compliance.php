@@ -39,6 +39,37 @@ return [
             'require_postal_address'    => false,
         ],
 
+        /*
+         * Malaysia — Personal Data Protection Act 2010.
+         *
+         * Consent is the basis for processing personal data (s.6), and s.43 gives
+         * a person the right to require you to stop processing their data for
+         * direct marketing. So: permission before sending, and an opt-out that is
+         * honoured absolutely. There is no equivalent of the US postal-address
+         * requirement, so that stays a warning rather than a block.
+         *
+         * This encodes a careful reading, not legal advice. If you operate at
+         * scale in Malaysia, have a lawyer check it.
+         */
+        'MY' => [
+            'label'       => 'Malaysia',
+            'rule_code'   => 'MY_PDPA_MARKETING',
+            'version'     => 1,
+            'require_consent_basis' => true,
+            'acceptable_consent_types' => [
+                'express',
+                'legitimate_existing_relationship',
+            ],
+            'allow_inferred'            => false,
+            'relationship_max_age_days' => 730,
+            'block_reason'              => 'MY_CONSENT_UNKNOWN',
+            'block_message'             => 'Marketing consent has not been established for this Malaysian contact.',
+            'require_sender_identity'   => true,
+            'require_contact_details'   => true,
+            'require_unsubscribe'       => true,
+            'require_postal_address'    => false,
+        ],
+
         'US' => [
             'label'       => 'United States',
             'rule_code'   => 'US_MARKETING_REQUIREMENTS',
@@ -148,25 +179,30 @@ return [
         'phone', 'paper', 'import', 'preference_centre', 'unsubscribe',
     ],
 
+    // What the customer sees on a badge or in a filter. Plain words: somebody
+    // running a cafe should not have to learn what a "hard bounce" is to
+    // understand why an address stopped receiving their newsletter.
     'suppression_reasons' => [
         'unsubscribe' => 'Unsubscribed',
-        'hard_bounce' => 'Hard bounce',
-        'complaint'   => 'Spam complaint',
-        'manual'      => 'Manually suppressed',
+        'hard_bounce' => 'Address does not exist',
+        'complaint'   => 'Marked as spam',
+        'manual'      => 'Added by your team',
         'legal'       => 'Legal request',
-        'invalid'     => 'Invalid address',
-        'admin_block' => 'Blocked by platform administrator',
+        'invalid'     => 'Not a real address',
+        'admin_block' => 'Blocked by support',
     ],
 
     // Soft bounces never suppress on their own; this is the escalation point.
     'soft_bounce_threshold' => 5,
 
+    // Shown to the recipient in the preference centre, so these are the plainest
+    // words of all — the person reading them is a customer, not a user.
     'preference_topics' => [
-        'all'             => 'All marketing email',
-        'promotions'      => 'Promotions and offers',
-        'newsletter'      => 'Newsletter',
-        'product_updates' => 'Product updates',
-        'events'          => 'Events',
+        'all'             => 'Everything',
+        'promotions'      => 'Special offers and discounts',
+        'newsletter'      => 'News and tips',
+        'product_updates' => 'Updates about what we do',
+        'events'          => 'Events and open days',
     ],
 
     'privacy_policy_version' => env('PRIVACY_POLICY_VERSION', '1.0'),

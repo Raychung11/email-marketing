@@ -26,6 +26,11 @@ return [
         'analytics',
     ],
 
+    // Where campaign sends are enqueued. Named here rather than in the
+    // dispatcher so an operator can move a noisy tenant onto its own queue
+    // without a code change.
+    'campaign_queue' => env('QUEUE_CAMPAIGN', 'email_marketing'),
+
     // Exponential backoff, then dead-letter. Permanent failures are not retried.
     'retry_backoff' => [60, 300, 1800, 7200],
     'max_attempts'  => 4,

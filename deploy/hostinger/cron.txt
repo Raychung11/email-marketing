@@ -1,0 +1,103 @@
+Cron jobs for Hostinger  (hPanel → Advanced → Cron Jobs)
+========================================================
+
+Choose "Custom", not "PHP". PHP mode locks the command to /usr/bin/php, which
+on Hostinger is 8.2 — too old for this application.
+
+Both jobs are required, and there are exactly two. Do not add a third copy of
+either "to make it faster" — sending the same campaign twice is a real outcome.
+
+Replace the path below with your own. Get it by running `pwd` over SSH from the
+application directory.
+
+
+1. Scheduler — every minute
+---------------------------
+Starts due campaigns, advances journeys, retries failures, refreshes reports.
+Every job inside takes a named expiring lock, so a minute that overlaps the
+previous run cannot double-execute anything.
+
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/cron-scheduler.sh
+
+
+2. Queue worker — every minute
+------------------------------
+Does the actual sending, draining the queues in strict priority order so a
+password reset never waits behind a 50,000-recipient campaign.
+
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/cron-worker.sh
+
+
+3. Database backup — once a day
+-------------------------------
+Dumps the database, gzips it, and keeps a fortnight. Written OUTSIDE the web
+root, because a database dump under public_html is your entire customer list one
+URL away.
+
+    /home/u822252863/apps/aigrowthhub/deploy/hostinger/backup.sh
+
+Set Minute to 20, Hour to 18, and leave Day, Month and Weekday on "Every (*)".
+That is 02:20 in Malaysia — late enough to be quiet, and not on the hour, where
+every other cron job on a shared server is already queueing.
+
+
+For jobs 1 and 2, set every dropdown — Minute, Hour, Day, Month, Weekday — to
+its "Every (*)" option, or pick "Every Minute" from Common Settings.
+
+
+Why scripts rather than the full command
+----------------------------------------
+Hostinger caps the command field at 255 characters and the worker command is
+well past that. Putting it in a script is the better arrangement anyway: the
+queue list and the flags sit in version control where they can be reviewed,
+instead of in a panel text box nobody looks at again. The scripts also find a
+PHP 8.3+ binary by checking its version rather than trusting a hardcoded path,
+so a host that moves PHP does not silently stop your sending.
+
+
+If your plan will not accept a one-minute schedule
+--------------------------------------------------
+Five minutes is fine. Edit deploy/hostinger/cron-worker.sh and change
+
+    MAX_SECONDS="${MAX_SECONDS:-55}"   to   MAX_SECONDS="${MAX_SECONDS:-290}"
+
+so the worker uses the whole gap instead of idling for four minutes in five.
+The only effect is that a campaign scheduled for 10:00 may begin at 10:04.
+
+
+Checking it works
+-----------------
+    tail -f storage/logs/scheduler.log
+    tail -f storage/logs/worker.log
+
+Both logs stay empty on a healthy server, which is correct: the scheduler and
+the worker log through the application logger, and a production LOG_LEVEL
+discards routine messages. An empty scheduler.log is not a problem. Errors do
+appear there.
+
+To ask whether cron is actually running, use:
+
+    php deploy/hostinger/preflight.php
+
+It reads a heartbeat each process writes on every run, and fails if either has
+not run in the last fifteen minutes. Without cron the site still loads and still
+looks fine — it simply never sends anything.
+
+The scripts rotate their own logs once they pass 10MB, since shared hosting has
+no logrotate.
+
+
+Restoring a backup
+------------------
+    ls -lh ~/backups/aigrowthhub/
+
+    # Check what you are about to restore before you restore it
+    gzip -dc ~/backups/aigrowthhub/<file>.sql.gz | head -40
+
+    # Restore. This REPLACES the current data.
+    php cron/console.php down
+    gzip -dc ~/backups/aigrowthhub/<file>.sql.gz | mysql --defaults-extra-file=<(php cron/console.php db:credentials /dev/stdout) u822252863_smartemail
+    php cron/console.php up
+
+Practise this once, on a spare database, before you need it. A backup nobody has
+ever restored is a guess.

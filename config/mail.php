@@ -18,6 +18,9 @@ return [
             'secret'            => env('AWS_SECRET_ACCESS_KEY', ''),
             'configuration_set' => env('AWS_SES_CONFIGURATION_SET', ''),
             'sns_topic_arn'     => env('AWS_SES_SNS_TOPIC_ARN', ''),
+            // Only for temporary credentials from STS. Long-lived keys leave it empty.
+            'session_token'     => env('AWS_SESSION_TOKEN', ''),
+            'timeout'           => (int) env('AWS_SES_TIMEOUT', 30),
         ],
         'log' => [
             'path' => base_path('storage/logs/mail.log'),
@@ -30,6 +33,11 @@ return [
     'throttle' => [
         'default_per_second' => (int) env('MAIL_RATE_PER_SECOND', 14),
         'respect_provider_quota' => true,
+        // The scheduler runs once a minute, so this is how much of the send rate
+        // one tick is allowed to enqueue. Enqueueing is not sending, but the
+        // workers drain as fast as they can, so bounding the queue is what
+        // actually keeps the provider's rate limit intact.
+        'dispatch_window_seconds' => 60,
     ],
 
     'tracking' => [

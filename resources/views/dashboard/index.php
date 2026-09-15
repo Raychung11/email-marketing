@@ -63,7 +63,7 @@ $currency = $metrics['currency'];
     <div class="stat__meta"><?= number_format($t['leads']) ?> leads</div>
   </div>
   <div class="stat stat--accent">
-    <div class="stat__label">Attributed revenue</div>
+    <div class="stat__label">Sales from email</div>
     <div class="stat__value"><?= e(money($rev['attributed_value'], $currency)) ?></div>
     <div class="stat__meta"><?= number_format($rev['attributed_conversions']) ?> attributed conversions</div>
   </div>
@@ -88,14 +88,14 @@ $currency = $metrics['currency'];
   <div class="col">
     <div class="card">
       <div class="card__head">
-        <h2>Next best actions</h2>
+        <h2>Worth doing next</h2>
         <div class="card__actions"><span class="badge">From your data</span></div>
       </div>
       <div class="card__body">
         <?php if ($recommendations === []): ?>
           <div class="empty" style="padding:24px">
-            <h3>Nothing needs your attention</h3>
-            <p>Recommendations appear here as soon as there is enough activity to find an opportunity.</p>
+            <h3>Nothing needs you right now</h3>
+            <p>Once you have sent a few campaigns we will start pointing out things worth doing.</p>
           </div>
         <?php else: ?>
           <?php foreach ($recommendations as $rec): ?>
@@ -123,7 +123,7 @@ $currency = $metrics['currency'];
     </div>
 
     <div class="card">
-      <div class="card__head"><h2>Contact growth</h2></div>
+      <div class="card__head"><h2>New contacts</h2></div>
       <div class="card__body">
         <canvas id="growthChart" height="110"
                 data-growth='<?= e(json_encode(array_map(static fn (array $r): array => [
@@ -143,7 +143,7 @@ $currency = $metrics['currency'];
             <tr><td>Sent</td><td class="num"><?= number_format($em['sent']) ?></td></tr>
             <tr><td>Delivered</td><td class="num"><?= $em['delivery_rate'] ?>%</td></tr>
             <tr>
-              <td><strong>Click rate</strong><div class="tiny muted">The engagement signal we trust</div></td>
+              <td><strong>Click rate</strong><div class="tiny muted">The number worth watching</div></td>
               <td class="num"><strong><?= $em['click_rate'] ?>%</strong></td>
             </tr>
             <tr>
@@ -175,10 +175,10 @@ $currency = $metrics['currency'];
     </div>
 
     <div class="card">
-      <div class="card__head"><h2>Marketing eligibility</h2></div>
+      <div class="card__head"><h2>Who you can email</h2></div>
       <div class="card__body">
         <div class="stat" style="border:0;box-shadow:none;padding:0">
-          <div class="stat__label">Contactable</div>
+          <div class="stat__label">You can email these</div>
           <div class="stat__value"><?= number_format($t['marketable']) ?></div>
           <div class="stat__meta">of <?= number_format($t['contacts']) ?> contacts</div>
         </div>
@@ -186,23 +186,23 @@ $currency = $metrics['currency'];
         <hr class="sep">
 
         <div class="flex-between small">
-          <span>Consent granted</span>
+          <span>Said yes</span>
           <strong><?= number_format($metrics['consent']['granted'] ?? 0) ?></strong>
         </div>
         <div class="flex-between small">
-          <span>Consent unknown</span>
+          <span>Never asked</span>
           <strong><?= number_format($metrics['consent']['unknown'] ?? 0) ?></strong>
         </div>
         <div class="flex-between small">
-          <span>Withdrawn</span>
+          <span>Asked us to stop</span>
           <strong><?= number_format($metrics['consent']['withdrawn'] ?? 0) ?></strong>
         </div>
         <div class="flex-between small">
-          <span>Suppressed</span>
+          <span>On the do-not-email list</span>
           <strong><?= number_format($t['suppressed']) ?></strong>
         </div>
 
-        <a class="btn btn--sm btn--block mt-2" href="/compliance">Compliance centre</a>
+        <a class="btn btn--sm btn--block mt-2" href="/compliance">Email rules</a>
       </div>
     </div>
 

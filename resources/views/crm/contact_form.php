@@ -37,7 +37,7 @@ $values       = $values ?? [];
           <div class="field">
             <label for="email">Email address *</label>
             <input id="email" type="email" name="email" required maxlength="255" value="<?= e($value('email')) ?>">
-            <div class="hint">Used to deduplicate and to match against the suppression list.</div>
+            <div class="hint">We use this to spot duplicates and to check the do-not-email list.</div>
           </div>
 
           <div class="grid-2">
@@ -200,41 +200,43 @@ $values       = $values ?? [];
         <!-- Consent is captured at creation with its evidence. Unticked means
              "unknown", which blocks marketing wherever a basis is required. -->
         <div class="card">
-          <div class="card__head"><h2>Marketing consent</h2></div>
+          <div class="card__head"><h2>Permission to email them</h2></div>
           <div class="card__body">
             <div class="field">
               <label class="check">
                 <input type="checkbox" name="consent_granted" value="1">
                 <span>
-                  This contact has given consent to receive marketing email
+                  This person agreed to receive marketing email from us
                   <div class="tiny muted">
-                    Only tick this if you can point to what they agreed to and when. Leaving it
-                    unticked records consent as <em>unknown</em>, and marketing email stays blocked
-                    in jurisdictions that require a basis.
+                    Only tick this if you could show what they agreed to and when. If you leave it
+                    unticked we record that you do not know, and we will not send them marketing
+                    email in countries where you need their say-so first. You can always add the
+                    permission later.
                   </div>
                 </span>
               </label>
             </div>
 
             <div class="field">
-              <label for="consent_type">Basis</label>
+              <label for="consent_type">How did they agree?</label>
               <select id="consent_type" name="consent_type">
-                <option value="express">Express — they actively opted in</option>
-                <option value="legitimate_existing_relationship">Existing customer relationship</option>
-                <option value="inferred">Inferred</option>
+                <option value="express">They ticked a box or filled in a form</option>
+                <option value="legitimate_existing_relationship">They are an existing customer</option>
+                <option value="inferred">We assumed it from how we got their details</option>
               </select>
             </div>
 
             <div class="field">
-              <label for="consent_reference">Evidence reference</label>
+              <label for="consent_reference">Where is the proof?</label>
               <input id="consent_reference" type="text" name="consent_reference" maxlength="255"
                      placeholder="e.g. website form, 4 Mar 2026">
+              <div class="tiny muted">A note to yourself, in case anyone ever asks.</div>
             </div>
 
             <div class="field">
-              <label for="consent_text">Wording they agreed to</label>
+              <label for="consent_text">What did they agree to?</label>
               <textarea id="consent_text" name="consent_text" maxlength="2000"
-                        placeholder="Paste the exact wording shown at the point of opt-in."></textarea>
+                        placeholder="Paste the wording that was next to the tick box."></textarea>
             </div>
           </div>
         </div>

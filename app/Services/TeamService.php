@@ -198,7 +198,7 @@ final class TeamService
             && $this->memberships->countOwners($this->tenant->organisationId()) <= 1
         ) {
             throw new ValidationException([
-                'role' => ['This is the only owner. Promote someone else to owner first.'],
+                'role' => ['This is the only owner. Make someone else an owner first.'],
             ]);
         }
 
@@ -218,13 +218,13 @@ final class TeamService
             && $this->memberships->countOwners($this->tenant->organisationId()) <= 1
         ) {
             throw new ValidationException([
-                'member' => ['This is the only owner and cannot be removed.'],
+                'member' => ['This is the only owner. You cannot remove the last one.'],
             ]);
         }
 
         if ((int) $membership['user_id'] === $this->auth->id()) {
             throw new ValidationException([
-                'member' => ['You cannot remove your own access. Ask another administrator.'],
+                'member' => ['You cannot remove yourself. Ask someone else on the team to do it.'],
             ]);
         }
 

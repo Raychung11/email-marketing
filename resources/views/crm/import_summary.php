@@ -26,16 +26,16 @@ $steps = ['Upload', 'Preview', 'Map', 'Validate', 'Consent', 'Duplicates', 'Impo
 
 <?php if ((int) $batch['no_consent_count'] > 0): ?>
   <div class="alert alert--warning">
-    <strong><?= number_format((int) $batch['no_consent_count']) ?> contacts were imported with unknown consent</strong>
-    They are in your CRM and available for sales follow-up, but marketing email to them is blocked
-    wherever a consent basis is required. Establish consent with an opt-in form or a re-permission
-    campaign to unlock them.
+    <strong>We do not know whether <?= number_format((int) $batch['no_consent_count']) ?> of these people agreed to hear from you</strong>
+    They are saved, and your team can still ring them or email them personally. We just will not put
+    them in a marketing campaign until you have their say-so. The usual way to get it is a sign-up
+    form on your website, or a one-off email asking them to confirm.
   </div>
 <?php endif; ?>
 
 <?php if ($problemRows !== []): ?>
   <div class="card">
-    <div class="card__head"><h2>Rows that need attention</h2></div>
+    <div class="card__head"><h2>Lines you might want to look at</h2></div>
     <div class="card__body card__body--tight">
       <div class="table-wrap">
         <table class="data">

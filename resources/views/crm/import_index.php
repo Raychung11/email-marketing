@@ -24,6 +24,12 @@
               automatically. Up to <?= number_format($rowLimit) ?> rows on your current
               <strong><?= e($trustLevel) ?></strong> trust level.
             </div>
+            <div class="hint">
+              Not sure what the file should look like?
+              <a href="/contacts/import/template">Download a template</a> with the
+              columns filled in. Only the email column is required &mdash; delete
+              any others you do not have.
+            </div>
           </div>
 
           <button class="btn btn--primary" type="submit">Upload and preview</button>
@@ -103,7 +109,7 @@
 
         <p class="muted mb-0">
           Purchased and scraped lists are not imported-and-blocked — the import does not run at all.
-          Existing suppressions are never cleared by an import, so someone who unsubscribed stays
+          Uploading a file never puts someone back on your mailing list, so anyone who unsubscribed stays
           unsubscribed even if their address appears in the file again.
         </p>
       </div>

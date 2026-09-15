@@ -59,30 +59,39 @@ $schedule = static function (string $name, int $ttl, callable $callback) use ($l
  * ---------------------------------------------------------------------------
  */
 
-// Activate scheduled campaigns. In phase 2 this builds the recipient snapshot and
-// enqueues; for now it reports what is due so the plumbing is observable.
-$schedule('campaigns.activate', 300, static function () use ($connection, $clock, $logger): void {
-    $due = $connection->select(
-        "SELECT id, organisation_id, name FROM campaigns
-         WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
-         ORDER BY scheduled_at LIMIT 50",
-        [$clock->nowString()]
-    );
+// Activate scheduled campaigns, build their recipient snapshots and enqueue the
+// sends; also close out campaigns whose queue has drained.
+//
+// The lock TTL is generous because building a snapshot for a large audience is
+// genuinely slow, and a second tick starting half-way through the first is how a
+// campaign sends twice.
+$schedule('campaigns.dispatch', 900, static function () use ($container, $logger): void {
+    /** @var App\Services\CampaignDispatcher $dispatcher */
+    $dispatcher = $container->make(App\Services\CampaignDispatcher::class);
 
-    if ($due !== []) {
-        $logger->info('Campaigns due for activation', ['count' => count($due)]);
+    $summary = $dispatcher->tick(25);
+
+    if (array_sum($summary) > 0) {
+        $logger->info('Campaign dispatch tick', $summary);
     }
 });
 
-// Wake automation runs whose timer has elapsed (phase 4 executes them).
-$schedule('automations.timers', 300, static function () use ($connection, $clock, $logger): void {
-    $waiting = (int) $connection->scalar(
-        "SELECT COUNT(*) FROM automation_runs WHERE status = 'waiting' AND resume_at IS NOT NULL AND resume_at <= ?",
-        [$clock->nowString()]
-    );
+/*
+ * Move automation runs along.
+ *
+ * Every journey step happens here or in a worker, never in a web request. A run
+ * is a row: this picks up the ones whose timer has elapsed, binds their tenant,
+ * advances each until it waits again, and moves on. A journey that waits three
+ * weeks costs nothing while it waits.
+ */
+$schedule('automations.run', 600, static function () use ($container, $logger): void {
+    /** @var App\Automation\AutomationService $automations */
+    $automations = $container->make(App\Automation\AutomationService::class);
 
-    if ($waiting > 0) {
-        $logger->info('Automation runs ready to resume', ['count' => $waiting]);
+    $moved = $automations->advanceDueRuns();
+
+    if ($moved > 0) {
+        $logger->info('Automation runs advanced', ['runs' => $moved]);
     }
 });
 
@@ -154,6 +163,35 @@ if ((int) $clock->now()->format('i') % 15 === 0) {
         }
 
         $tenant->clear();
+    });
+
+    // Journeys that start from the calendar rather than from an event:
+    // "a customer has gone quiet", "it is somebody's birthday". Nothing fires
+    // them, so something has to go looking.
+    $schedule('automations.scheduled_triggers', 900, static function () use ($container, $logger): void {
+        /** @var App\Automation\AutomationService $automations */
+        $automations = $container->make(App\Automation\AutomationService::class);
+
+        $started = $automations->fireScheduledTriggers();
+
+        if ($started > 0) {
+            $logger->info('Scheduled journeys started', ['runs' => $started]);
+        }
+    });
+
+    // Re-check domains whose DNS was still propagating, so a customer who
+    // publishes their records overnight is verified by morning.
+    $schedule('domains.recheck', 900, static function () use ($container, $logger): void {
+        /** @var App\Services\SendingDomainService $domains */
+        $domains = $container->make(App\Services\SendingDomainService::class);
+
+        $results = $domains->recheckPending(25);
+
+        foreach ($results as $result) {
+            if ($result['status'] === 'verified') {
+                $logger->info('Sending domain verified', ['domain' => $result['domain']]);
+            }
+        }
     });
 
     // Deliverability monitoring.
@@ -306,9 +344,17 @@ if ((int) $clock->now()->format('i') === 0) {
     });
 }
 
-$logger->info('Scheduler tick complete', [
-    'ran'         => $ran,
-    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+$durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+$logger->info('Scheduler tick complete', ['ran' => $ran, 'duration_ms' => $durationMs]);
+
+// Written every tick, including the quiet ones. This is the only reliable
+// answer to "is cron actually running?" — the log cannot answer it, because a
+// tick with nothing to do produces no log line, and a production LOG_LEVEL
+// discards the ones it does produce.
+$container->make(App\Support\Heartbeat::class)->record('scheduler', [
+    'ran'         => count($ran),
+    'duration_ms' => $durationMs,
 ]);
 
 exit(0);

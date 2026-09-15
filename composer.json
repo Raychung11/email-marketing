@@ -12,7 +12,6 @@
     },
     "suggest": {
         "ext-redis": "Required for the Redis-backed queue driver and rate limiting in production.",
-        "aws/aws-sdk-php": "Required by the Amazon SES email provider (Phase 2).",
         "ext-intl": "Improves locale-aware formatting."
     },
     "require-dev": {

@@ -3,6 +3,10 @@
 Target: a single Linux VPS to start, horizontally splittable later (web nodes,
 worker nodes, managed MySQL, managed Redis) with no code change.
 
+> Deploying to **shared hosting** instead? There is no Redis, no Supervisor, and
+> the database is MariaDB rather than MySQL 8, so almost none of this page
+> applies. Follow [DEPLOY_HOSTINGER.md](DEPLOY_HOSTINGER.md).
+
 ## 1. Server requirements
 
 - Ubuntu 22.04/24.04 or Debian 12
@@ -184,6 +188,13 @@ monitors, usage rollups, and import cleanup.
 4. Create an SNS topic for event publishing and subscribe it (HTTPS) to
    `https://app.example.com/webhooks/aws/ses`. Enable: `SEND`, `DELIVERY`,
    `OPEN`, `CLICK`, `BOUNCE`, `COMPLAINT`, `REJECT`, `RENDERING_FAILURE`.
+   Then **set `AWS_SES_SNS_TOPIC_ARN` to that topic's ARN**. Leaving it empty
+   makes the endpoint accept any topic whose signature checks out, which is
+   convenient while wiring things up and wrong in production: a valid Amazon
+   signature only proves Amazon sent the message, and anyone with an AWS account
+   can publish to their own topic and aim it at your URL. SNS confirms the
+   subscription by POSTing a `SubscriptionConfirmation`; the endpoint completes
+   the handshake itself, so no manual step is needed.
 5. Request production access — **sandbox accounts are rate- and
    recipient-restricted**, and quotas differ per account and Region. The app
    reads the live quota via `getQuota()` and throttles to it; it never assumes a
@@ -192,9 +203,17 @@ monitors, usage rollups, and import cleanup.
    `ses:GetSendQuota`, `ses:GetAccount`, `ses:GetIdentityVerificationAttributes`.
    Prefer an instance role over static keys.
 
-The SNS endpoint verifies the message signature against the Amazon certificate
-and confirms subscriptions explicitly. Unsigned or unverifiable payloads are
-rejected — inbound webhook data is never trusted.
+The SNS endpoint verifies every message's signature against the certificate
+Amazon names, having first checked that certificate is served from an Amazon SNS
+host, and rejects anything older than an hour so a captured message cannot be
+replayed. Unsigned or unverifiable payloads are refused with a 403; anything else
+it decides to ignore answers 200, because SNS retries non-2xx responses for hours
+and a payload rejected on its merits will not improve on the twentieth attempt.
+
+Outbound HTTPS from the application servers must be able to reach
+`sns.<region>.amazonaws.com` — the certificate fetch and the subscription
+handshake both go there. If that is blocked, every event is rejected and the
+do-not-email list silently stops filling.
 
 ## 8. OpenAI
 

@@ -28,17 +28,18 @@ $steps = ['Upload', 'Preview', 'Map', 'Validate', 'Consent', 'Duplicates', 'Impo
 
 <?php if ($report['suppressed'] > 0): ?>
   <div class="alert alert--warning">
-    <strong><?= number_format($report['suppressed']) ?> of these addresses are on your suppression list</strong>
-    They will still be imported so your CRM record is complete, but they remain suppressed and will
-    not receive marketing email. Importing never clears a suppression.
+    <strong><?= number_format($report['suppressed']) ?> of these addresses are on your do-not-email list</strong>
+    We will still save their details so your records are complete, but they stay on the list and will
+    not get marketing email. Uploading a file never puts someone back on your mailing list.
   </div>
 <?php endif; ?>
 
 <?php if ($report['requires_au_declaration']): ?>
   <div class="alert alert--info">
-    <strong>This import includes Australian contacts</strong>
-    Australian marketing email requires an acceptable consent basis. Contacts whose consent
-    cannot be established will be imported but blocked from marketing sends until consent is recorded.
+    <strong>Some of these people are in Australia</strong>
+    Australian law says you need someone's permission before you send them marketing email. We will
+    save everyone, but anyone you cannot show agreed to hear from you is left out of campaigns until
+    you record how they agreed.
   </div>
 <?php endif; ?>
 
