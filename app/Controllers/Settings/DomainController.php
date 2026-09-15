@@ -103,9 +103,18 @@ final class DomainController extends Controller
 
         $sent = $this->domains->sendTestEmail($id, (string) $data['recipient'], $this->mailer);
 
-        return $sent
-            ? $this->withSuccess('/settings/domains/' . $id, 'Test message sent to ' . $data['recipient'] . '.')
-            : $this->withError('/settings/domains/' . $id, 'The provider refused the test message. Check the logs.');
+        if ($sent) {
+            return $this->withSuccess('/settings/domains/' . $id, 'Test message sent to ' . $data['recipient'] . '.');
+        }
+
+        $reason = $this->mailer->lastError();
+
+        return $this->withError(
+            '/settings/domains/' . $id,
+            $reason !== null && $reason !== ''
+                ? $reason
+                : 'The email provider refused the test message and gave no reason.'
+        );
     }
 
     public function destroy(Request $request): Response

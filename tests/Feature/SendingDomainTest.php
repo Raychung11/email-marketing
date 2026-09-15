@@ -382,4 +382,46 @@ final class SendingDomainTest extends TestCase
 
         return '';
     }
+
+    public function testARefusedTestMessageSaysWhyRatherThanSayingCheckTheLogs(): void
+    {
+        $org = $this->createOrganisation();
+        $this->actingAs($org['user_id'], $org['organisation_id']);
+
+        /** @var \App\Services\TransactionalMailer $mailer */
+        $mailer = $this->container->make(\App\Services\TransactionalMailer::class);
+
+        // What a brand new SES account does to every address it has not been
+        // told about: refuses, without mentioning the sandbox. Somebody reading
+        // that goes back and re-checks their DNS records, which are fine.
+        $provider = new \App\Mail\AmazonSesProvider(
+            ['region' => 'ap-southeast-2', 'key' => 'AKIDEXAMPLE', 'secret' => 'secret'],
+            null,
+            (new \Tests\Support\FakeHttpClient())->queueJson(400, [
+                '__type'  => 'com.amazonaws.ses#MessageRejected',
+                'message' => 'Email address is not verified. The following identities failed the check in region AP-SOUTHEAST-2: someone@example.com',
+            ])
+        );
+
+        $this->container->instance(\App\Mail\EmailProviderInterface::class, $provider);
+
+        /** @var \App\Services\TransactionalMailer $mailer */
+        $mailer = $this->container->make(\App\Services\TransactionalMailer::class);
+
+        $sent = $mailer->sendToContact(
+            $this->container->make(\App\Support\TenantContext::class)->organisation(),
+            ['id' => null, 'email' => 'someone@example.com'],
+            'Test message',
+            '<p>Test</p>',
+            'Test'
+        );
+
+        $this->assertFalse($sent, 'Nothing is reported as sent that was refused');
+
+        $reason = $mailer->lastError();
+
+        $this->assertNotNull($reason, 'There is a reason to show, not just a log line');
+        $this->assertContainsString('sandbox', $reason, 'It names the actual cause');
+        $this->assertContainsString('production access', $reason, 'And what to do about it');
+    }
 }
