@@ -161,4 +161,53 @@ final class SignatureV4Test extends TestCase
             'The token is signed, not merely sent alongside'
         );
     }
+
+    public function testAPathNeedingEncodingIsSignedTheSameWhicheverFormItArrivesIn(): void
+    {
+        $signer = $this->signer('ses');
+
+        $raw     = $signer->sign('GET', 'https://email.ap-southeast-2.amazonaws.com/v2/email/identities/someone@example.com', [], '', self::WHEN);
+        $encoded = $signer->sign('GET', 'https://email.ap-southeast-2.amazonaws.com/v2/email/identities/someone%40example.com', [], '', self::WHEN);
+
+        // A caller who passes a raw "@" and one who passes "%40" mean the same
+        // request, so they must sign identically.
+        $this->assertSame($raw['Authorization'], $encoded['Authorization']);
+    }
+
+    public function testThePathIsDoubleEncodedForEverythingExceptS3(): void
+    {
+        // The bug this pins: canonicalPath encoded once, so "@" was signed as
+        // %40 instead of %2540. GetAccount worked because its path has no
+        // character needing encoding at all; GetEmailIdentity failed with
+        // SignatureDoesNotMatch, and only that one call. AWS's published vectors
+        // do not catch it because get-vanilla's path is a bare "/".
+        $url = 'https://email.ap-southeast-2.amazonaws.com/v2/email/identities/someone%40example.com';
+
+        $standard = (new SignatureV4(self::KEY, self::SECRET, 'ap-southeast-2', 'ses'))
+            ->sign('GET', $url, [], '', self::WHEN);
+
+        $singleEncoded = (new SignatureV4(self::KEY, self::SECRET, 'ap-southeast-2', 'ses', '', false))
+            ->sign('GET', $url, [], '', self::WHEN);
+
+        $this->assertNotSame(
+            $standard['Authorization'],
+            $singleEncoded['Authorization'],
+            'Double-encoding actually changes what is signed, so the setting is live'
+        );
+    }
+
+    public function testAPlainPathIsUnaffectedByDoubleEncoding(): void
+    {
+        // Why the bug hid: with nothing to encode, both settings agree, so every
+        // call except the one carrying an address kept working.
+        $url = 'https://email.ap-southeast-2.amazonaws.com/v2/email/account';
+
+        $standard = (new SignatureV4(self::KEY, self::SECRET, 'ap-southeast-2', 'ses'))
+            ->sign('GET', $url, [], '', self::WHEN);
+
+        $singleEncoded = (new SignatureV4(self::KEY, self::SECRET, 'ap-southeast-2', 'ses', '', false))
+            ->sign('GET', $url, [], '', self::WHEN);
+
+        $this->assertSame($standard['Authorization'], $singleEncoded['Authorization']);
+    }
 }

@@ -26,6 +26,12 @@ final class SignatureV4
         private readonly string $region,
         private readonly string $service,
         private readonly string $sessionToken = '',
+        /**
+         * Every AWS service signs a double-encoded path except S3, which signs
+         * the path exactly as sent. Getting this wrong is invisible until a
+         * request carries a character that needs encoding at all.
+         */
+        private readonly bool $doubleEncodePath = true,
     ) {
     }
 
@@ -142,9 +148,21 @@ final class SignatureV4
     }
 
     /**
-     * The path, URI-encoded per segment. Slashes separate segments and stay as
-     * they are; everything else is encoded, so a domain identity containing a
-     * character like '+' signs the same way AWS parses it.
+     * The path, URI-encoded per segment — twice.
+     *
+     * This is the part of SigV4 most likely to be got wrong, because it is
+     * invisible until a request carries a character that needs encoding. A path
+     * of /v2/email/account signs identically either way; /v2/email/identities/
+     * someone%40example.com does not, and the only symptom is
+     * SignatureDoesNotMatch on that one call while every other call works.
+     *
+     * AWS builds the canonical request from a path encoded a second time on top
+     * of what went on the wire, so an "@" travels as %40 and is signed as %2540.
+     * S3 is the one exception and signs the path as sent.
+     *
+     * Decoding first means a caller who passes a raw "@" and one who passes an
+     * already-encoded "%40" sign the same thing, which is what you want from a
+     * function nobody should have to think about.
      */
     private function canonicalPath(string $path): string
     {
@@ -153,7 +171,14 @@ final class SignatureV4
         }
 
         $segments = array_map(
-            static fn (string $segment): string => rawurlencode(rawurldecode($segment)),
+            function (string $segment): string {
+                $once = rawurlencode(rawurldecode($segment));
+
+                // After one pass the segment holds only unreserved characters
+                // and %XX escapes, so a second pass is exactly escaping the
+                // percent signs.
+                return $this->doubleEncodePath ? str_replace('%', '%25', $once) : $once;
+            },
             explode('/', $path)
         );
 
