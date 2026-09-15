@@ -387,4 +387,76 @@ final class ComplianceTest extends TestCase
             $contacts->findOrFail($contactId)
         );
     }
+
+    public function testMalaysianContactWithUnknownConsentIsBlocked(): void
+    {
+        $org = $this->createOrganisation([
+            'country'  => 'MY',
+            'timezone' => 'Asia/Kuala_Lumpur',
+        ]);
+        $this->bindTenant($org['organisation_id']);
+
+        $contactId = $this->createContact([
+            'email'   => 'test@example.com.my',
+            'country' => 'MY',
+        ]);
+
+        /** @var ContactRepository $contacts */
+        $contacts = $this->container->make(ContactRepository::class);
+        /** @var ComplianceService $compliance */
+        $compliance = $this->container->make(ComplianceService::class);
+
+        $decision = $compliance->canSendMarketingEmail(
+            $this->tenant->organisation(),
+            $contacts->findOrFail($contactId)
+        );
+
+        // The PDPA makes consent the basis for processing personal data, so a
+        // contact with no recorded permission is not sendable — the same posture
+        // as Australia rather than the American opt-out model.
+        $this->assertFalse($decision->allowed, 'A Malaysian contact with unknown consent must not be sent marketing');
+        $this->assertSame(ReasonCode::MY_CONSENT_UNKNOWN, $decision->reason);
+        $this->assertContainsString('Malaysian', $decision->message . ReasonCode::describe($decision->reason));
+    }
+
+    public function testMalaysianContactWithExpressConsentIsAllowed(): void
+    {
+        $org = $this->createOrganisation(['country' => 'MY']);
+        $this->bindTenant($org['organisation_id']);
+
+        $contactId = $this->createContact(['email' => 'optedin@example.com.my', 'country' => 'MY'], [
+            'status'       => 'granted',
+            'consent_type' => 'express',
+        ]);
+
+        /** @var ContactRepository $contacts */
+        $contacts = $this->container->make(ContactRepository::class);
+        /** @var ComplianceService $compliance */
+        $compliance = $this->container->make(ComplianceService::class);
+
+        $decision = $compliance->canSendMarketingEmail(
+            $this->tenant->organisation(),
+            $contacts->findOrFail($contactId)
+        );
+
+        $this->assertTrue($decision->allowed, 'Express consent is a sufficient basis in Malaysia');
+    }
+
+    public function testMalaysiaIsSelectableAtSetupAndHasItsOwnRules(): void
+    {
+        /** @var \App\Core\Config $config */
+        $config = $this->container->make(\App\Core\Config::class);
+
+        // A country offered in the dropdown with no rule set of its own silently
+        // falls back to the defaults, which is a quiet way to apply the wrong
+        // law. If it is selectable, it needs rules.
+        $countries = (array) $config->get('app.supported_countries', []);
+        $rules     = (array) $config->get('compliance.countries', []);
+
+        $this->assertTrue(isset($countries['MY']), 'Malaysia can be chosen during setup');
+        $this->assertTrue(isset($rules['MY']), 'And has a rule set rather than falling through to the default');
+        $this->assertTrue((bool) $rules['MY']['require_consent_basis'], 'Permission is required before sending');
+        $this->assertFalse((bool) $rules['MY']['require_postal_address'], 'No US-style postal address requirement');
+        $this->assertTrue((bool) $rules['MY']['require_unsubscribe'], 'Opt-out must always be offered');
+    }
 }

@@ -25,6 +25,7 @@ return [
     'supported_countries' => [
         'US' => 'United States',
         'AU' => 'Australia',
+        'MY' => 'Malaysia',
         'NZ' => 'New Zealand',
         'GB' => 'United Kingdom',
         'CA' => 'Canada',

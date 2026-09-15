@@ -39,6 +39,7 @@ final class ReasonCode
 
     // Country specific
     public const AU_CONSENT_UNKNOWN = 'AU_CONSENT_UNKNOWN';
+    public const MY_CONSENT_UNKNOWN = 'MY_CONSENT_UNKNOWN';
     public const US_OPTED_OUT       = 'US_OPTED_OUT';
 
     // Organisation level
@@ -142,6 +143,9 @@ final class ReasonCode
             self::AU_CONSENT_UNKNOWN
                 => 'This contact is in Australia and you have no record of them agreeing to hear from you. '
                     . 'Australian law needs that before you can send marketing email.',
+            self::MY_CONSENT_UNKNOWN
+                => 'This contact is in Malaysia and you have no record of them agreeing to hear from you. '
+                    . 'Malaysian law needs that before you can send marketing email.',
             self::US_OPTED_OUT            => 'They asked to stop receiving marketing email.',
             self::ORG_SENDING_PAUSED      => 'Sending is paused for your account right now.',
             self::ORG_SUSPENDED           => 'Your account is suspended, so nothing can be sent.',

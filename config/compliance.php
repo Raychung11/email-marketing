@@ -39,6 +39,37 @@ return [
             'require_postal_address'    => false,
         ],
 
+        /*
+         * Malaysia — Personal Data Protection Act 2010.
+         *
+         * Consent is the basis for processing personal data (s.6), and s.43 gives
+         * a person the right to require you to stop processing their data for
+         * direct marketing. So: permission before sending, and an opt-out that is
+         * honoured absolutely. There is no equivalent of the US postal-address
+         * requirement, so that stays a warning rather than a block.
+         *
+         * This encodes a careful reading, not legal advice. If you operate at
+         * scale in Malaysia, have a lawyer check it.
+         */
+        'MY' => [
+            'label'       => 'Malaysia',
+            'rule_code'   => 'MY_PDPA_MARKETING',
+            'version'     => 1,
+            'require_consent_basis' => true,
+            'acceptable_consent_types' => [
+                'express',
+                'legitimate_existing_relationship',
+            ],
+            'allow_inferred'            => false,
+            'relationship_max_age_days' => 730,
+            'block_reason'              => 'MY_CONSENT_UNKNOWN',
+            'block_message'             => 'Marketing consent has not been established for this Malaysian contact.',
+            'require_sender_identity'   => true,
+            'require_contact_details'   => true,
+            'require_unsubscribe'       => true,
+            'require_postal_address'    => false,
+        ],
+
         'US' => [
             'label'       => 'United States',
             'rule_code'   => 'US_MARKETING_REQUIREMENTS',
