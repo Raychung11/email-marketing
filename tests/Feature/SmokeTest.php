@@ -462,4 +462,35 @@ final class SmokeTest extends TestCase
             'The new password works'
         );
     }
+
+    public function testTheFooterShowsCompanyDetailsOnlyWhenTheyAreConfigured(): void
+    {
+        /** @var \App\Core\Config $config */
+        $config = $this->container->make(\App\Core\Config::class);
+        /** @var \App\Core\View $view */
+        $view = $this->container->make(\App\Core\View::class);
+
+        // Nothing configured: the block is simply absent. The codebase is a
+        // product, so it must not assume it knows who is running it.
+        $view->shareMany(['company' => []]);
+
+        $bare = $this->get('/')->body();
+
+        $this->assertNotContainsString('Company No.', $bare);
+        $this->assertNotContainsString('Registered office:', $bare);
+
+        $view->shareMany(['company' => [
+            'legal_name'      => 'EXAMPLE TRADING ENTERPRISE',
+            'registration_no' => '201703354884 (002720749-M)',
+            'address'         => '1-3 Example Street, 52100 Kuala Lumpur',
+        ]]);
+
+        $filled = $this->get('/')->body();
+
+        $this->assertContainsString('EXAMPLE TRADING ENTERPRISE', $filled);
+        $this->assertContainsString('Company No. 201703354884', $filled);
+        $this->assertContainsString('1-3 Example Street', $filled);
+
+        $view->shareMany(['company' => (array) $config->get('app.company', [])]);
+    }
 }

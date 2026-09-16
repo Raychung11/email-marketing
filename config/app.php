@@ -21,6 +21,19 @@ return [
     'supported_currencies' => ['USD', 'AUD', 'NZD', 'GBP', 'EUR', 'CAD'],
     'default_currency'     => 'USD',
 
+    /*
+     * The legal entity behind this deployment.
+     *
+     * In config rather than in a template because this is a multi-tenant product:
+     * the codebase should not know who is running it. Left empty, the footer
+     * simply omits the block.
+     */
+    'company' => [
+        'legal_name'      => env('COMPANY_LEGAL_NAME', ''),
+        'registration_no' => env('COMPANY_REGISTRATION_NO', ''),
+        'address'         => env('COMPANY_ADDRESS', ''),
+    ],
+
     // Launch markets. Additional countries only need a compliance rule set.
     'supported_countries' => [
         'US' => 'United States',

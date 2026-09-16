@@ -206,6 +206,7 @@ final class Application
                 'appName'   => $config->get('app.name'),
                 'appUrl'    => $config->get('app.url'),
                 'appEnv'    => $config->get('app.env'),
+                'company'   => (array) $config->get('app.company', []),
                 'csrfToken' => '',   // replaced per-request by ViewContextMiddleware
             ]);
 

@@ -47,7 +47,21 @@
     </nav>
   </div>
   <div class="m-wrap m-foot__legal">
-    &copy; <?= date('Y') ?> <?= e($appName ?? 'AI Growth Hub') ?>. Built for businesses in the United States and Australia.
+    <?php
+    $company = $company ?? [];
+    $legal   = trim((string) ($company['legal_name'] ?? ''));
+    ?>
+
+    &copy; <?= date('Y') ?> <?= e($legal !== '' ? $legal : ($appName ?? 'AI Growth Hub')) ?>.
+    Built for businesses in Malaysia, Australia and the United States.
+
+    <?php if (trim((string) ($company['registration_no'] ?? '')) !== ''): ?>
+      <br>Company No. <?= e((string) $company['registration_no']) ?>
+    <?php endif; ?>
+
+    <?php if (trim((string) ($company['address'] ?? '')) !== ''): ?>
+      <br>Registered office: <?= e((string) $company['address']) ?>
+    <?php endif; ?>
   </div>
 </footer>
 
