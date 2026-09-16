@@ -23,7 +23,7 @@
   <div class="stat stat--accent">
     <div class="stat__label">Eligible for email</div>
     <div class="stat__value"><?= number_format($preview['eligible']) ?></div>
-    <div class="stat__meta">passes suppression and consent</div>
+    <div class="stat__meta">you are allowed to email these</div>
   </div>
   <div class="stat">
     <div class="stat__label">Suppressed</div>
@@ -42,11 +42,11 @@
 </div>
 
 <div class="card">
-  <div class="card__head"><h2>Sample of eligible contacts</h2></div>
+  <div class="card__head"><h2>A few of the people you can email</h2></div>
   <div class="card__body card__body--tight">
     <?php if ($preview['sample'] === []): ?>
       <div class="empty" style="padding:24px">
-        <p class="mb-0">No eligible contacts match these rules at the moment.</p>
+        <p class="mb-0">Nobody you are allowed to email fits these rules right now.</p>
       </div>
     <?php else: ?>
       <div class="table-wrap">

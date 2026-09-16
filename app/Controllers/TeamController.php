@@ -38,9 +38,38 @@ final class TeamController extends Controller
         ]);
 
         $token = $this->team->invite((string) $data['email'], (string) $data['role']);
-        $this->team->sendInvitation((string) $data['email'], $token);
+
+        // The membership row and the email are two separate things. Reporting
+        // "invitation sent" off the back of the row alone is how somebody ends
+        // up waiting a week for an email their provider refused in a tenth of a
+        // second.
+        if (!$this->team->sendInvitation((string) $data['email'], $token)) {
+            return $this->withWarning(
+                '/team',
+                $data['email'] . ' has been added to your team, but the invitation email could not '
+                . 'be sent: ' . ($this->team->lastMailError() ?? 'the email provider refused it.')
+                . ' They can still join using this link, which you will need to pass on yourself: '
+                . url('invitations/' . rawurlencode($token))
+            );
+        }
 
         return $this->withSuccess('/team', 'Invitation sent to ' . $data['email'] . '.');
+    }
+
+    public function resend(Request $request): Response
+    {
+        $result = $this->team->resendInvitation((int) $request->route('id'));
+
+        if (!$result['sent']) {
+            return $this->withWarning(
+                '/team',
+                'A new invitation was created for ' . $result['email'] . ', but the email could not '
+                . 'be sent: ' . ($this->team->lastMailError() ?? 'the email provider refused it.')
+                . ' Pass this link on yourself: ' . url('invitations/' . rawurlencode($result['token']))
+            );
+        }
+
+        return $this->withSuccess('/team', 'A fresh invitation is on its way to ' . $result['email'] . '.');
     }
 
     public function changeRole(Request $request): Response

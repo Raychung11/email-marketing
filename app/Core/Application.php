@@ -98,6 +98,12 @@ final class Application
 
         $c->instance(self::class, $this);
 
+        // The container resolves itself. Without this, anything that asks for a
+        // Container gets a brand new empty one through autowiring — every
+        // singleton missing, and confusing "cannot resolve $config of Connection"
+        // errors a long way from the cause.
+        $c->instance(Container::class, $c);
+
         $c->singleton(Config::class, function (): Config {
             $config = new Config($this->basePath . '/config');
             $config->load();
@@ -200,6 +206,7 @@ final class Application
                 'appName'   => $config->get('app.name'),
                 'appUrl'    => $config->get('app.url'),
                 'appEnv'    => $config->get('app.env'),
+                'company'   => (array) $config->get('app.company', []),
                 'csrfToken' => '',   // replaced per-request by ViewContextMiddleware
             ]);
 
@@ -207,6 +214,16 @@ final class Application
         });
 
         $c->singleton(TenantContext::class, static fn (): TenantContext => new TenantContext());
+
+        $c->singleton(
+            \App\Support\HttpClient::class,
+            static fn (): \App\Support\HttpClient => new \App\Support\CurlHttpClient()
+        );
+
+        $c->singleton(
+            \App\Support\Heartbeat::class,
+            static fn (): \App\Support\Heartbeat => new \App\Support\Heartbeat(base_path('storage/framework'))
+        );
 
         /*
          * These three carry per-request state — the resolved identity, and the
@@ -263,12 +280,44 @@ final class Application
                 ),
                 default => new \App\Mail\AmazonSesProvider(
                     (array) $config->get('mail.providers.ses', []),
-                    $logger
+                    $logger,
+                    $c->make(\App\Support\HttpClient::class)
                 ),
             };
         });
 
         $c->alias(\App\Mail\ChannelProviderInterface::class, \App\Mail\EmailProviderInterface::class);
+
+        // Text messaging, behind the same channel abstraction as email so the
+        // automation engine never names a vendor or a channel.
+        $c->singleton(\App\Messaging\TextProviderInterface::class, static function (Container $c): \App\Messaging\TextProviderInterface {
+            /** @var Config $config */
+            $config = $c->make(Config::class);
+            $driver = (string) $config->get('messaging.provider', 'log');
+
+            if ($driver === 'twilio') {
+                return new \App\Messaging\TwilioTextProvider(
+                    (array) $config->get('messaging.providers.twilio', []),
+                    'sms',
+                    $c->make(Logger::class)
+                );
+            }
+
+            return new \App\Messaging\LogTextProvider(
+                (string) $config->get('messaging.providers.log.path', '/tmp/sms.log'),
+                'sms',
+                $c->make(Logger::class)
+            );
+        });
+
+        // --- DNS (domain verification) --------------------------------------
+        $c->singleton(\App\Support\DnsResolver::class, static fn (): \App\Support\DnsResolver
+            => new \App\Support\SystemDnsResolver());
+
+        // Used to fetch the SNS signing certificate. An interface so a test can
+        // verify a real signature without reaching the internet.
+        $c->singleton(\App\Support\HttpFetcher::class, static fn (Container $c): \App\Support\HttpFetcher
+            => new \App\Support\CurlHttpFetcher($c->make(Logger::class)));
 
         // --- AI -------------------------------------------------------------
         $c->singleton(\App\AI\AiProviderInterface::class, static function (Container $c): \App\AI\AiProviderInterface {

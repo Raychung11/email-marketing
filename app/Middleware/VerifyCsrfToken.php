@@ -23,6 +23,11 @@ final class VerifyCsrfToken implements Middleware
         '/webhooks/',
         '/api/',
         '/track/',
+        // A signup form is embedded on somebody else's website, so it cannot
+        // carry our session's token. It is protected instead by a honeypot, a
+        // tight rate limit, and the fact that the worst a forged post can do is
+        // add a contact who has not consented to anything.
+        '/f/',
     ];
 
     public function __construct(private readonly Csrf $csrf)

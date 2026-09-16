@@ -22,6 +22,7 @@ final class SegmentController extends Controller
         Session $session,
         Config $config,
         private readonly SegmentService $segments,
+        private readonly \App\Services\AiSegmentService $aiSegments,
         private readonly TagRepository $tags,
         private readonly ListRepository $lists,
         private readonly AuthManager $auth,
@@ -68,6 +69,7 @@ final class SegmentController extends Controller
             'countries' => $this->config->get('app.supported_countries', []),
             'statuses'  => $this->config->get('crm.customer_statuses', []),
             'stages'    => $this->config->get('crm.lifecycle_stages', []),
+            'aiAvailable' => $this->aiSegments->isAvailable(),
         ]);
     }
 
@@ -108,6 +110,7 @@ final class SegmentController extends Controller
             'countries' => $this->config->get('app.supported_countries', []),
             'statuses'  => $this->config->get('crm.customer_statuses', []),
             'stages'    => $this->config->get('crm.lifecycle_stages', []),
+            'aiAvailable' => $this->aiSegments->isAvailable(),
         ]);
     }
 

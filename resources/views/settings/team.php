@@ -44,11 +44,19 @@
                   </td>
                   <td class="small muted nowrap"><?= e(substr((string) ($member['last_active_at'] ?? ''), 0, 16) ?: '—') ?></td>
                   <td class="right">
-                    <form method="post" action="/team/<?= (int) $member['id'] ?>/remove"
-                          data-confirm="Remove this person's access to this organisation?">
-                      <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-                      <button class="btn btn--sm btn--danger" type="submit">Remove</button>
-                    </form>
+                    <div class="flex wrap" style="justify-content:flex-end">
+                      <?php if ((string) $member['status'] === 'invited'): ?>
+                        <form method="post" action="/team/<?= (int) $member['id'] ?>/resend">
+                          <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
+                          <button class="btn btn--sm" type="submit">Send again</button>
+                        </form>
+                      <?php endif; ?>
+                      <form method="post" action="/team/<?= (int) $member['id'] ?>/remove"
+                            data-confirm="Remove this person's access to this organisation?">
+                        <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
+                        <button class="btn btn--sm btn--danger" type="submit">Remove</button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -100,7 +108,11 @@
             </select>
           </div>
           <button class="btn btn--primary btn--block" type="submit">Send invitation</button>
-          <p class="tiny muted mt-1 mb-0">The invitation link expires in 7 days.</p>
+          <p class="tiny muted mt-1 mb-0">
+            The invitation link expires in 7 days. If the email does not arrive, check
+            <a href="/outbox?class=transactional">Sent email</a> — a refusal is recorded there with
+            the reason.
+          </p>
         </form>
       </div>
     </div>

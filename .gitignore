@@ -9,6 +9,8 @@
 !/storage/uploads/.gitkeep
 /storage/framework/cache/*
 !/storage/framework/cache/.gitkeep
+/storage/framework/*.heartbeat
+/storage/framework/maintenance.flag
 /storage/tmp/*
 !/storage/tmp/.gitkeep
 *.sqlite

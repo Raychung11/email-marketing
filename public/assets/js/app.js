@@ -316,6 +316,28 @@
       matchSelect.addEventListener('change', sync);
     }
 
+    /*
+     * Replace every row with a definition from somewhere else — today that means
+     * the plain-English description box. The rules land in the ordinary builder
+     * rather than in a hidden field, so the user sees each condition and can
+     * change or delete any of them before saving.
+     */
+    root.loadDefinition = function (definition) {
+      if (!definition || !Array.isArray(definition.rules)) { return; }
+
+      rowsHost.innerHTML = '';
+
+      if (matchSelect && definition.match) { matchSelect.value = definition.match; }
+
+      definition.rules.forEach(function (rule) {
+        if (rule && !rule.rules) { addRow(rule); }
+      });
+
+      if (!rowsHost.children.length) { addRow(null); }
+
+      sync();
+    };
+
     if (initial && Array.isArray(initial.rules) && initial.rules.length) {
       if (matchSelect && initial.match) { matchSelect.value = initial.match; }
 
@@ -331,6 +353,290 @@
 
     sync();
   }
+
+  /* --------------------------------------------------------- AI assistant */
+
+  (function () {
+    var go = document.getElementById('askGo');
+    if (!go) { return; }
+
+    var input  = document.getElementById('question');
+    var answer = document.getElementById('askAnswer');
+
+    document.addEventListener('click', function (event) {
+      var example = event.target.closest('[data-ask]');
+      if (!example) { return; }
+
+      event.preventDefault();
+      input.value = example.getAttribute('data-ask');
+      go.click();
+    });
+
+    go.addEventListener('click', function () {
+      var question = (input.value || '').trim();
+      if (!question) { input.focus(); return; }
+
+      go.disabled = true;
+      answer.hidden = false;
+      answer.innerHTML = '<p class="muted small" style="margin:0">Looking at your figures…</p>';
+
+      var body = new FormData();
+      body.append('_token', token());
+      body.append('question', question);
+
+      fetch('/ai/assistant', {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          go.disabled = false;
+
+          if (!data || !data.answer) {
+            answer.innerHTML = '<p class="small muted" style="margin:0">' +
+              'I could not answer that one. The reporting screens have the numbers.</p>';
+            return;
+          }
+
+          var html = '<p>' + escapeHtml(data.answer) + '</p>';
+
+          if ((data.suggestions || []).length) {
+            html += '<p class="small" style="margin-bottom:4px"><strong>You might want to:</strong></p><ul class="small">';
+            data.suggestions.forEach(function (suggestion) {
+              html += '<li><a href="' + escapeHtml(suggestion.where) + '">' +
+                escapeHtml(suggestion.label) + '</a></li>';
+            });
+            html += '</ul>';
+          }
+
+          if ((data.used || []).length) {
+            html += '<p class="tiny muted">Looked at: ' +
+              escapeHtml(data.used.join(', ').replace(/_/g, ' ')) + '.</p>';
+          }
+
+          // Said out loud rather than quietly shortened, so a missing sentence
+          // never reads as the assistant simply having less to say.
+          if (data.dropped > 0) {
+            html += '<p class="tiny" style="color:#b45309">We removed ' + data.dropped +
+              ' sentence(s) that quoted figures we cannot account for.</p>';
+          }
+
+          html += '<p class="tiny muted" style="margin-bottom:0">' +
+            escapeHtml(data.disclaimer || '') + '</p>';
+
+          answer.innerHTML = html;
+        })
+        .catch(function () {
+          go.disabled = false;
+          answer.innerHTML = '<p class="small muted" style="margin:0">Could not reach the AI just now.</p>';
+        });
+    });
+  })();
+
+  /* ------------------------------------------------ AI campaign explanation */
+
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-review-go]');
+    if (!button) { return; }
+
+    var panel = document.getElementById('campaignReview');
+    if (!panel) { return; }
+
+    button.disabled = true;
+    button.textContent = 'Reading the numbers…';
+
+    var body = new FormData();
+    body.append('_token', token());
+
+    fetch(panel.getAttribute('data-review-url'), {
+      method: 'POST',
+      body: body,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data || !data.headline) {
+          panel.innerHTML = '<p class="small muted" style="margin:0">Nothing came back. ' +
+            'The numbers above are still correct.</p>';
+          return;
+        }
+
+        var html = '<p style="margin:0 0 8px"><strong>' + escapeHtml(data.headline) + '</strong></p>';
+
+        if (data.summary) {
+          html += '<p class="small">' + escapeHtml(data.summary) + '</p>';
+        }
+
+        if ((data.suggestions || []).length) {
+          html += '<p class="small" style="margin-bottom:4px"><strong>Worth trying next time:</strong></p><ul class="small">';
+          data.suggestions.forEach(function (suggestion) {
+            html += '<li>' + escapeHtml(suggestion) + '</li>';
+          });
+          html += '</ul>';
+        }
+
+        // When a sentence was thrown away for quoting a figure we cannot account
+        // for, say so. Quietly shortening the text would leave the impression the
+        // AI simply had less to say.
+        if ((data.dropped || []).length) {
+          html += '<p class="tiny" style="color:#b45309">We removed ' + data.dropped.length +
+            ' sentence(s) because they quoted figures we cannot account for. ' +
+            'Only the numbers on this page are measured.</p>';
+        }
+
+        html += '<p class="tiny muted" style="margin-bottom:0">' + escapeHtml(data.disclaimer || '') + '</p>';
+
+        panel.innerHTML = html;
+      })
+      .catch(function () {
+        button.disabled = false;
+        button.textContent = 'Explain this campaign';
+      });
+  });
+
+  /* --------------------------------------------- AI smart-list description */
+
+  /*
+   * Sends a description, gets validated rules back, and loads them into the
+   * builder so the user can see and change every condition. The rules are shown
+   * in plain English with a live count before anything is saved — a list nobody
+   * checked is a list that emails the wrong people.
+   */
+  (function () {
+    var go = document.getElementById('aiSegmentGo');
+    if (!go) { return; }
+
+    var input  = document.getElementById('aiSegmentDescription');
+    var result = document.getElementById('aiSegmentResult');
+
+    go.addEventListener('click', function () {
+      var description = (input.value || '').trim();
+
+      if (!description) { input.focus(); return; }
+
+      go.disabled = true;
+      result.hidden = false;
+      result.innerHTML = '<span class="muted">Working it out…</span>';
+
+      var body = new FormData();
+      body.append('_token', token());
+      body.append('description', description);
+
+      fetch('/segments/ai', {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          go.disabled = false;
+
+          if (!data || !data.definition) {
+            var problem = (data && data.error && data.error.message) ||
+              (data && data.errors && data.errors.ai && data.errors.ai[0]) ||
+              'That did not work. Try describing it differently.';
+            result.innerHTML = '<span style="color:#b91c1c">' + escapeHtml(problem) + '</span>';
+            return;
+          }
+
+          var html = '<p style="margin:0 0 6px"><strong>' + escapeHtml(data.described) + '</strong></p>' +
+            '<p class="muted" style="margin:0 0 6px">' +
+            escapeHtml(String(data.preview.eligible)) + ' of ' +
+            escapeHtml(String(data.preview.total)) + ' matching contacts can be emailed.</p>';
+
+          (data.warnings || []).forEach(function (warning) {
+            html += '<p style="margin:0 0 4px;color:#b45309">' + escapeHtml(warning) + '</p>';
+          });
+
+          html += '<p class="muted" style="margin:6px 0 0">' + escapeHtml(data.disclaimer) + '</p>';
+          result.innerHTML = html;
+
+          // Hand the rules to the builder so every condition is visible and
+          // editable. Nothing is saved until the user presses save.
+          var builder = document.getElementById('segmentBuilder');
+          if (builder && typeof builder.loadDefinition === 'function') {
+            builder.loadDefinition(data.definition);
+          }
+        })
+        .catch(function () {
+          go.disabled = false;
+          result.innerHTML = '<span class="muted">Could not reach the AI just now.</span>';
+        });
+    });
+  })();
+
+  /* ------------------------------------------------------- AI subject lines */
+
+  /*
+   * Fetches suggestions and writes them next to the field. They are never
+   * applied automatically: the person sending the email chooses the subject
+   * line, because they are the one whose name is on it.
+   */
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-ai-subjects]');
+    if (!button) { return; }
+
+    var panel = button.parentNode.querySelector('.ai-subjects');
+    var input = document.getElementById('subject');
+    if (!panel) { return; }
+
+    button.disabled = true;
+    panel.hidden = false;
+    panel.innerHTML = '<span class="muted">Thinking…</span>';
+
+    var body = new FormData();
+    body.append('_token', token());
+
+    fetch(button.getAttribute('data-ai-subjects'), {
+      method: 'POST',
+      body: body,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        button.disabled = false;
+
+        var subjects = (data && data.subjects) || [];
+
+        if (!subjects.length) {
+          panel.innerHTML = '<span class="muted">Nothing came back. Try again in a moment.</span>';
+          return;
+        }
+
+        var html = '<p class="muted" style="margin:8px 0 4px">Suggestions — press one to use it:</p><ul style="margin:0;padding-left:18px">';
+
+        subjects.forEach(function (item) {
+          html += '<li style="margin-bottom:4px">' +
+            '<a href="#" data-ai-subject="' + escapeHtml(item.subject) + '">' +
+            escapeHtml(item.subject) + '</a>' +
+            (item.why ? ' <span class="muted">— ' + escapeHtml(item.why) + '</span>' : '') +
+            '</li>';
+        });
+
+        panel.innerHTML = html + '</ul>';
+      })
+      .catch(function () {
+        button.disabled = false;
+        panel.innerHTML = '<span class="muted">Could not reach the AI just now.</span>';
+      });
+
+    if (input) { input.focus(); }
+  });
+
+  document.addEventListener('click', function (event) {
+    var link = event.target.closest('[data-ai-subject]');
+    if (!link) { return; }
+
+    event.preventDefault();
+
+    var input = document.getElementById('subject');
+    if (input) { input.value = link.getAttribute('data-ai-subject'); input.focus(); }
+  });
 
   /* ------------------------------------------------------------------- helpers */
 

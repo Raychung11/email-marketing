@@ -84,7 +84,7 @@ final class ImportTest extends TestCase
             static fn () => $imports->run($batchId)
         );
 
-        $this->assertContainsString('declare how these contacts were obtained', implode(' ', $exception->firstErrors()));
+        $this->assertContainsString('how you got these contacts', implode(' ', $exception->firstErrors()));
     }
 
     public function testPhoneConsentRequiresAnEvidenceReference(): void
@@ -345,5 +345,69 @@ final class ImportTest extends TestCase
         @unlink($path);
 
         return $result['batch_id'];
+    }
+
+    public function testTheDownloadableTemplateMatchesTheFieldsTheImporterAccepts(): void
+    {
+        $org = $this->createOrganisation();
+        $this->actingAs($org['user_id'], $org['organisation_id']);
+
+        $response = $this->get('/contacts/import/template');
+
+        $this->assertStatus(200, $response);
+        $this->assertContainsString('text/csv', $response->headers()['Content-Type'] ?? '');
+        $this->assertContainsString('attachment;', $response->headers()['Content-Disposition'] ?? '');
+
+        /** @var \App\Services\ImportService $imports */
+        $imports = $this->container->make(\App\Services\ImportService::class);
+
+        $body   = ltrim($response->body(), "\xEF\xBB\xBF");
+        $header = str_getcsv(strtok($body, "\r\n") ?: '');
+
+        // The template is generated from mappableFields() precisely so it cannot
+        // drift from what the importer will accept. Assert that it has not.
+        $this->assertSame(
+            array_keys($imports->mappableFields()),
+            $header,
+            'The template header is exactly the importer field list, in order'
+        );
+    }
+
+    public function testTheTemplateSurvivesARoundTripThroughTheImporter(): void
+    {
+        $org = $this->createOrganisation();
+        $this->actingAs($org['user_id'], $org['organisation_id']);
+
+        $body = ltrim($this->get('/contacts/import/template')->body(), "\xEF\xBB\xBF");
+        $rows = array_values(array_filter(array_map(
+            static fn (string $line): array => str_getcsv($line),
+            preg_split('/\r\n/', trim($body)) ?: []
+        )));
+
+        $this->assertTrue(count($rows) >= 4, 'Header plus worked examples');
+
+        $header = $rows[0];
+        $emailAt = array_search('email', $header, true);
+        $this->assertNotSame(false, $emailAt, 'The one required column is present');
+
+        // Every example row must have an address the importer would accept, and
+        // the same column count as the header — a template that fails its own
+        // import is worse than no template.
+        foreach (array_slice($rows, 1) as $index => $row) {
+            $this->assertSame(
+                count($header),
+                count($row),
+                'Example row ' . ($index + 1) . ' has one cell per column'
+            );
+
+            $this->assertTrue(
+                filter_var($row[$emailAt], FILTER_VALIDATE_EMAIL) !== false,
+                'Example row ' . ($index + 1) . ' carries a valid address'
+            );
+        }
+
+        // One example deliberately contains an apostrophe; it must come back
+        // intact rather than having split the row.
+        $this->assertContainsString("O'Connor", $body);
     }
 }

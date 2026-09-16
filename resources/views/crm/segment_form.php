@@ -1,6 +1,6 @@
 <?php
 /**
- * Segment builder.
+ * Smart list builder.
  *
  * The builder posts a JSON definition. It is validated server-side against the
  * field registry in config/segments.php before any SQL is produced — the payload
@@ -9,7 +9,7 @@
 $__view->extend('layouts.app');
 
 $isEdit = $segment !== null;
-$title  = $isEdit ? 'Edit segment' : 'New segment';
+$title  = $isEdit ? 'Edit smart list' : 'New smart list';
 $action = $isEdit ? '/segments/' . (int) $segment['id'] : '/segments';
 
 // Value choices for fields that have a fixed vocabulary, so the builder offers a
@@ -43,7 +43,7 @@ $choices = [
         <div class="card__head"><h2>Details</h2></div>
         <div class="card__body">
           <div class="field">
-            <label for="name">Segment name</label>
+            <label for="name">Smart list name</label>
             <input id="name" type="text" name="name" required maxlength="160"
                    value="<?= e($old['name'] ?? (string) ($segment['name'] ?? '')) ?>"
                    placeholder="e.g. Perth customers inactive 6 months">
@@ -55,6 +55,24 @@ $choices = [
           </div>
         </div>
       </div>
+
+      <?php if ($aiAvailable): ?>
+        <div class="card">
+          <div class="card__head"><h2>Describe it instead</h2></div>
+          <div class="card__body">
+            <p class="small muted mt-0">
+              Say who you are after in your own words and we will set the conditions up for you.
+              You can change anything afterwards.
+            </p>
+            <div class="field">
+              <input type="text" id="aiSegmentDescription" maxlength="1000"
+                     placeholder="e.g. customers in Perth who had a boiler fitted more than two years ago">
+            </div>
+            <button class="btn" type="button" id="aiSegmentGo">Set it up for me</button>
+            <div id="aiSegmentResult" class="small" hidden style="margin-top:10px"></div>
+          </div>
+        </div>
+      <?php endif; ?>
 
       <div class="card">
         <div class="card__head"><h2>Conditions</h2></div>
@@ -85,14 +103,14 @@ $choices = [
 
           <noscript>
             <div class="alert alert--warning">
-              The visual builder needs JavaScript. You can still create segments through the API, or
+              The visual builder needs JavaScript. You can still create smart lists through the API, or
               enable JavaScript to use this screen.
             </div>
           </noscript>
 
           <div class="hint">
             Dates accept relative expressions such as <span class="mono">now-180days</span> or
-            <span class="mono">now-1year</span>, which is what keeps a saved segment meaning
+            <span class="mono">now-1year</span>, which is what keeps a saved smart list meaning
             "inactive for six months" rather than "inactive since the day I made this".
           </div>
         </div>
@@ -110,7 +128,7 @@ $choices = [
       </div>
 
       <div class="flex mt-2">
-        <button class="btn btn--primary" type="submit"><?= $isEdit ? 'Save segment' : 'Create segment' ?></button>
+        <button class="btn btn--primary" type="submit"><?= $isEdit ? 'Save smart list' : 'Create smart list' ?></button>
         <a class="btn btn--ghost" href="/segments">Cancel</a>
       </div>
     </div>

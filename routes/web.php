@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Controllers\Auth\LoginController;
 use App\Controllers\Auth\PasswordController;
 use App\Controllers\Auth\RegisterController;
+use App\Controllers\Ai\StudioController;
+use App\Controllers\AnalyticsController;
+use App\Controllers\AutomationController;
 use App\Controllers\ComplianceController;
 use App\Controllers\Crm\CompanyController;
 use App\Controllers\Crm\ContactController;
@@ -14,10 +17,19 @@ use App\Controllers\Crm\SegmentController;
 use App\Controllers\Crm\SuppressionController;
 use App\Controllers\Crm\TagController;
 use App\Controllers\DashboardController;
+use App\Controllers\FormAdminController;
 use App\Controllers\HealthController;
+use App\Controllers\LeadController;
+use App\Controllers\Marketing\CampaignController;
+use App\Controllers\Marketing\OutboxController;
+use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
+use App\Controllers\Public_\FormController;
+use App\Controllers\Public_\SesWebhookController;
+use App\Controllers\Public_\TrackingController;
 use App\Controllers\Public_\UnsubscribeController;
+use App\Controllers\Settings\DomainController;
 use App\Controllers\SettingsController;
 use App\Controllers\TeamController;
 use App\Core\Router;
@@ -37,7 +49,7 @@ use App\Middleware\Throttle;
 
 return static function (Router $router): void {
     // ---------------------------------------------------------------- public
-    $router->get('/', static fn (): \App\Core\Response => \App\Core\Response::redirect('/dashboard'));
+    $router->get('/', \App\Controllers\MarketingController::class . '@home');
 
     $router->get('/health', HealthController::class . '@live');
     $router->get('/health/ready', HealthController::class . '@ready');
@@ -72,13 +84,152 @@ return static function (Router $router): void {
     $router->get('/preferences/{token}', UnsubscribeController::class . '@preferences', [Throttle::class . ':60,60']);
     $router->post('/preferences/{token}', UnsubscribeController::class . '@updatePreferences', [Throttle::class . ':60,60']);
 
+    /*
+     * Open and click tracking.
+     *
+     * No auth and no CSRF: the caller is a mail client or a recipient's browser.
+     * The signed token is the authorisation, and the click endpoint resolves its
+     * destination from campaign_links rather than from the URL, so it cannot be
+     * turned into an open redirect. Throttled generously — a popular campaign
+     * produces a burst of legitimate traffic from one mail provider's egress.
+     */
+    $router->get('/track/open/{token}', TrackingController::class . '@open', [Throttle::class . ':600,60']);
+    $router->get('/track/click/{token}', TrackingController::class . '@click', [Throttle::class . ':600,60']);
+
+    /*
+     * Signup forms.
+     *
+     * Public, because the person filling one in is a member of the public. The
+     * tenant comes from the organisation and slug together, so a slug from one
+     * business can never resolve against another's form.
+     */
+    $router->get('/f/{organisation}/{slug}', FormController::class . '@show', [Throttle::class . ':120,60']);
+    $router->post('/f/{organisation}/{slug}', FormController::class . '@submit', [Throttle::class . ':20,60']);
+
+    /*
+     * Amazon SES delivery notifications, via SNS.
+     *
+     * No auth and no CSRF — Amazon has no credentials of ours to present. The SNS
+     * signature is the authentication, and the controller checks it before it
+     * reads anything else out of the body.
+     */
+    $router->post('/webhooks/aws/ses', SesWebhookController::class . '@handle', [Throttle::class . ':1000,60']);
+
     // ------------------------------------------------------- authenticated
     $authenticated = [Authenticate::class, BindTenant::class];
 
     $router->group(['middleware' => $authenticated], static function (Router $router): void {
         // Dashboard
         $router->get('/dashboard', DashboardController::class . '@index');
-        $router->get('/analytics', DashboardController::class . '@analytics', [
+        // ------------------------------------------------------------ forms
+        $router->get('/forms', FormAdminController::class . '@index', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms', FormAdminController::class . '@store', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->get('/forms/{id}', FormAdminController::class . '@show', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms/{id}', FormAdminController::class . '@update', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+        $router->post('/forms/{id}/publish', FormAdminController::class . '@publish', [
+            RequirePermission::class . ':forms.manage',
+        ]);
+
+        // ------------------------------------------------------------ leads
+        $router->get('/leads', LeadController::class . '@index', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->get('/leads/pipeline', LeadController::class . '@pipeline', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->post('/leads', LeadController::class . '@store', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+        $router->get('/leads/{id}', LeadController::class . '@show', [
+            RequirePermission::class . ':leads.view',
+        ]);
+        $router->post('/leads/{id}/stage', LeadController::class . '@moveStage', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+        $router->post('/leads/{id}/responded', LeadController::class . '@markResponded', [
+            RequirePermission::class . ':leads.manage',
+        ]);
+
+        // --------------------------------------------------------- journeys
+        $router->get('/automations', AutomationController::class . '@index', [
+            RequirePermission::class . ':automations.view',
+        ]);
+        $router->post('/automations', AutomationController::class . '@store', [
+            RequirePermission::class . ':automations.create',
+        ]);
+        $router->get('/automations/{id}', AutomationController::class . '@show', [
+            RequirePermission::class . ':automations.view',
+        ]);
+        $router->post('/automations/{id}/steps', AutomationController::class . '@addStep', [
+            RequirePermission::class . ':automations.edit',
+        ]);
+        $router->post('/automations/{id}/activate', AutomationController::class . '@activate', [
+            RequirePermission::class . ':automations.activate',
+        ]);
+        $router->post('/automations/{id}/pause', AutomationController::class . '@pause', [
+            RequirePermission::class . ':automations.activate',
+        ]);
+        $router->post('/automations/{id}/delete', AutomationController::class . '@destroy', [
+            RequirePermission::class . ':automations.edit',
+        ]);
+        $router->get('/automations/runs/{id}', AutomationController::class . '@runLog', [
+            RequirePermission::class . ':automations.view',
+        ]);
+
+        /*
+         * ------------------------------------------------------------------ AI
+         *
+         * Everything here produces a draft or a suggestion. Nothing sends, and
+         * nothing skips review: an AI-written campaign lands in the same draft
+         * state as one somebody typed and needs the same approval.
+         */
+        $router->get('/ai/assistant', StudioController::class . '@assistant', [
+            RequirePermission::class . ':ai.use',
+        ]);
+        $router->post('/ai/assistant', StudioController::class . '@ask', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
+        ]);
+        $router->get('/ai/studio', StudioController::class . '@index', [
+            RequirePermission::class . ':ai.use',
+        ]);
+        $router->post('/ai/studio', StudioController::class . '@draft', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':30,3600',
+        ]);
+        $router->post('/ai/studio/keep', StudioController::class . '@keep', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns/{id}/ai/review', StudioController::class . '@reviewCampaign', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':30,3600',
+        ]);
+        $router->post('/segments/ai', StudioController::class . '@suggestSegment', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
+        ]);
+        $router->post('/campaigns/{id}/ai/subjects', StudioController::class . '@subjects', [
+            RequirePermission::class . ':ai.use', Throttle::class . ':60,3600',
+        ]);
+
+        // ---------------------------------------------------------- analytics
+        $router->get('/analytics', AnalyticsController::class . '@index', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/campaigns', AnalyticsController::class . '@campaigns', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/deliverability', AnalyticsController::class . '@deliverability', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/revenue', AnalyticsController::class . '@revenue', [
+            RequirePermission::class . ':analytics.view',
+        ]);
+        $router->get('/analytics/engagement', AnalyticsController::class . '@engagement', [
             RequirePermission::class . ':analytics.view',
         ]);
 
@@ -111,6 +262,10 @@ return static function (Router $router): void {
             RequirePermission::class . ':contacts.import',
         ]);
         $router->post('/contacts/import', ImportController::class . '@upload', [
+            RequirePermission::class . ':contacts.import',
+        ]);
+        // Before the {id} routes: "template" is a literal, not a batch id.
+        $router->get('/contacts/import/template', ImportController::class . '@template', [
             RequirePermission::class . ':contacts.import',
         ]);
         $router->get('/contacts/import/{id}/map', ImportController::class . '@showMapping', [
@@ -285,6 +440,9 @@ return static function (Router $router): void {
         $router->post('/team/{id}/role', TeamController::class . '@changeRole', [
             RequirePermission::class . ':users.manage',
         ]);
+        $router->post('/team/{id}/resend', TeamController::class . '@resend', [
+            RequirePermission::class . ':users.manage',
+        ]);
         $router->post('/team/{id}/remove', TeamController::class . '@remove', [
             RequirePermission::class . ':users.manage',
         ]);
@@ -312,6 +470,136 @@ return static function (Router $router): void {
             RequirePermission::class . ':settings.manage',
         ]);
         $router->post('/settings/custom-fields/{id}/delete', SettingsController::class . '@destroyCustomField', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+
+        // ------------------------------------------------------------- outbox
+        $router->get('/outbox', OutboxController::class . '@index', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/outbox/export', OutboxController::class . '@export', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+
+        // ---------------------------------------------------------- campaigns
+        $router->get('/campaigns', CampaignController::class . '@index', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/campaigns/create', CampaignController::class . '@create', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns', CampaignController::class . '@store', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->get('/campaigns/{id}', CampaignController::class . '@show', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/campaigns/{id}/edit', CampaignController::class . '@edit', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->post('/campaigns/{id}', CampaignController::class . '@update', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->get('/campaigns/{id}/preview', CampaignController::class . '@preview', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->post('/campaigns/{id}/validate', CampaignController::class . '@validateCampaign', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+        $router->post('/campaigns/{id}/submit', CampaignController::class . '@submit', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+
+        /*
+         * Approval. The permission is necessary but not sufficient: the service
+         * also refuses to let the author approve their own campaign, which the
+         * permission matrix cannot express because a marketing manager
+         * legitimately holds both permissions.
+         */
+        $router->post('/campaigns/{id}/approve', CampaignController::class . '@approve', [
+            RequirePermission::class . ':campaigns.approve',
+        ]);
+        $router->post('/campaigns/{id}/request-changes', CampaignController::class . '@requestChanges', [
+            RequirePermission::class . ':campaigns.approve',
+        ]);
+
+        $router->post('/campaigns/{id}/schedule', CampaignController::class . '@schedule', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/send', CampaignController::class . '@sendNow', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/unschedule', CampaignController::class . '@unschedule', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/pause', CampaignController::class . '@pause', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/resume', CampaignController::class . '@resume', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/cancel', CampaignController::class . '@cancel', [
+            RequirePermission::class . ':campaigns.send',
+        ]);
+        $router->post('/campaigns/{id}/duplicate', CampaignController::class . '@duplicate', [
+            RequirePermission::class . ':campaigns.create',
+        ]);
+        $router->post('/campaigns/{id}/delete', CampaignController::class . '@destroy', [
+            RequirePermission::class . ':campaigns.edit',
+        ]);
+
+        // ---------------------------------------------------------- templates
+        $router->get('/templates', TemplateController::class . '@index', [
+            RequirePermission::class . ':templates.manage,campaigns.view',
+        ]);
+        $router->get('/templates/create', TemplateController::class . '@create', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates', TemplateController::class . '@store', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        // Server-rendered preview: the editor shows exactly what will be sent.
+        $router->post('/templates/preview', TemplateController::class . '@preview', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->get('/templates/{id}/edit', TemplateController::class . '@edit', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}', TemplateController::class . '@update', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/duplicate', TemplateController::class . '@duplicate', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/test', TemplateController::class . '@sendTest', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+        $router->post('/templates/{id}/delete', TemplateController::class . '@destroy', [
+            RequirePermission::class . ':templates.manage',
+        ]);
+
+        // ------------------------------------------------------ sending domains
+        // Authentication setup is a settings concern, and a prerequisite for
+        // every campaign: the validator refuses an unverified from-domain.
+        $router->get('/settings/domains', DomainController::class . '@index', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains', DomainController::class . '@store', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->get('/settings/domains/{id}', DomainController::class . '@show', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/verify', DomainController::class . '@verify', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/refresh', DomainController::class . '@refresh', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/test', DomainController::class . '@sendTest', [
+            RequirePermission::class . ':settings.manage',
+        ]);
+        $router->post('/settings/domains/{id}/delete', DomainController::class . '@destroy', [
             RequirePermission::class . ':settings.manage',
         ]);
 

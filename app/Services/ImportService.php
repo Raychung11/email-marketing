@@ -90,7 +90,7 @@ final class ImportService
         if ($headers === []) {
             @unlink($storedPath);
 
-            throw new ValidationException(['file' => ['That file does not appear to contain a header row.']]);
+            throw new ValidationException(['file' => ['The first line of your file should be column names, like Email and First name.']]);
         }
 
         $totalRows = $reader->countRows();
@@ -153,7 +153,7 @@ final class ImportService
 
         if (!isset($clean['email'])) {
             throw new ValidationException([
-                'mapping' => ['An email column must be mapped: it is how contacts are identified and deduplicated.'],
+                'mapping' => ['Tell us which column holds the email address — we cannot match people up without it.'],
             ]);
         }
 
@@ -178,7 +178,7 @@ final class ImportService
         $mapping = $batch['column_map'] ?? [];
 
         if (!is_array($mapping) || !isset($mapping['email'])) {
-            throw new ValidationException(['mapping' => ['Map the email column before validating.']]);
+            throw new ValidationException(['mapping' => ['Tell us which column holds the email address first.']]);
         }
 
         $reader = new CsvReader((string) $batch['stored_path']);
@@ -294,7 +294,7 @@ final class ImportService
 
         if (!isset($sources[$source])) {
             throw new ValidationException([
-                'consent_source' => ['Select how these contacts were obtained.'],
+                'consent_source' => ['Tell us how you got these contacts.'],
             ]);
         }
 
@@ -365,7 +365,7 @@ final class ImportService
 
         if ((string) $batch['status'] === self::STEP_BLOCKED) {
             throw new ValidationException([
-                'file' => ['This import was blocked and cannot be run.'],
+                'file' => ['We cannot upload this file. See the reason above.'],
             ]);
         }
 

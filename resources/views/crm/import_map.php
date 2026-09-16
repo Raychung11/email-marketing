@@ -20,7 +20,7 @@ $currentStep = 3;
     <div class="card__body">
       <p class="small muted mt-0">
         We have guessed from your header row. Email is required — it is how contacts are
-        deduplicated and matched against the suppression list.
+        checked for duplicates and against your do-not-email list.
       </p>
 
       <div class="grid-2">

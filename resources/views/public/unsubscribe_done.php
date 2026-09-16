@@ -9,7 +9,7 @@
 </p>
 
 <p class="small muted">
-  The address has been added to their suppression list, so it stays unsubscribed even if it is
+  We have added the address to their do-not-email list, so it stays unsubscribed even if it is
   imported again later.
 </p>
 

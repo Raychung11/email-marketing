@@ -3,17 +3,17 @@
 
 <div class="page-head">
   <div>
-    <h1>Compliance centre</h1>
+    <h1>Email rules</h1>
     <p>The rules currently in force, your consent posture, and the audit trail.</p>
   </div>
   <div class="page-head__actions">
-    <a class="btn" href="/compliance/audit-log">Full audit log</a>
+    <a class="btn" href="/compliance/audit-log">See everything that happened</a>
     <a class="btn" href="/suppressions">Suppression list</a>
   </div>
 </div>
 
 <div class="alert alert--info">
-  <strong>Compliance-supporting controls, not legal advice</strong>
+  <strong>We help you follow the rules — but we are not your lawyer</strong>
   This platform helps you record consent, honour opt-outs and demonstrate what happened. It does
   not tell you what the law requires of your business. Rules are versioned and configurable
   precisely because they change.
@@ -134,7 +134,7 @@
                   <td class="num"><?= number_format((int) $row['total']) ?></td>
                   <td class="small muted">
                     <?= $code === 'AU'
-                        ? 'Australia — consent basis required'
+                        ? 'Australia — you need their permission first'
                         : ($code === 'US'
                             ? 'United States — opt-out, sender identity and postal address required'
                             : ($code === '' ? 'Falls back to your organisation country' : 'Default — consent basis required')) ?>
@@ -150,7 +150,7 @@
     <div class="card">
       <div class="card__head">
         <h2>Recent audited actions</h2>
-        <div class="card__actions"><a class="btn btn--sm" href="/compliance/audit-log">View all</a></div>
+        <div class="card__actions"><a class="btn btn--sm" href="/compliance/audit-log">See all</a></div>
       </div>
       <div class="card__body card__body--tight">
         <div class="table-wrap">
@@ -201,7 +201,7 @@
       <div class="card__head"><h2>Suppression by reason</h2></div>
       <div class="card__body">
         <?php if ($suppression === []): ?>
-          <p class="small muted mb-0">Nothing suppressed yet.</p>
+          <p class="small muted mb-0">Nobody on the do-not-email list yet.</p>
         <?php else: ?>
           <?php foreach ($suppression as $reason => $count): ?>
             <div class="flex-between small">

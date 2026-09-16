@@ -16,8 +16,11 @@ use App\Database\Schema\Schema;
  */
 final class SchemaDumper
 {
-    public function __construct(private readonly string $migrationsPath)
-    {
+    public function __construct(
+        private readonly string $migrationsPath,
+        private readonly string $charset = 'utf8mb4',
+        private readonly string $collation = 'utf8mb4_unicode_ci',
+    ) {
     }
 
     /** @return array<int,string> */
@@ -25,7 +28,11 @@ final class SchemaDumper
     {
         // The connection is never queried: dryRun() intercepts every statement
         // before it reaches PDO. It exists only so Schema can pick the grammar.
-        $target = Connection::fromPdo($this->nullPdo(), $driver === 'mysql' ? 'mysql' : 'sqlite');
+        $target = Connection::fromPdo(
+            $this->nullPdo(),
+            $driver === 'mysql' ? 'mysql' : 'sqlite',
+            ['charset' => $this->charset, 'collation' => $this->collation]
+        );
         $schema = new Schema($target);
 
         return $target->dryRun(function () use ($schema, $target): void {

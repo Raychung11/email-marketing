@@ -58,8 +58,18 @@ final class TransactionalMailer
         return $this->send($email, 'Reset your ' . $appName . ' password', $html, $text);
     }
 
-    public function sendTeamInvitation(string $email, string $organisationName, string $inviterName, string $token): bool
-    {
+    /**
+     * $organisationId is what puts the invitation in the outbox. Without it the
+     * send leaves no trace at all, so "I invited them and they never got it"
+     * becomes unanswerable — which is precisely when someone goes looking.
+     */
+    public function sendTeamInvitation(
+        string $email,
+        string $organisationName,
+        string $inviterName,
+        string $token,
+        ?int $organisationId = null,
+    ): bool {
         $appName = (string) $this->config->get('app.name', 'AI Growth Hub');
         $url     = url('invitations/' . rawurlencode($token));
 
@@ -74,13 +84,34 @@ final class TransactionalMailer
 
         $text = "{$inviterName} has invited you to join {$organisationName} on {$appName}.\n\n{$url}\n";
 
-        return $this->send($email, 'Join ' . $organisationName . ' on ' . $appName, $html, $text);
+        return $this->send(
+            $email,
+            'Join ' . $organisationName . ' on ' . $appName,
+            $html,
+            $text,
+            $organisationId
+        );
     }
 
     /**
      * @param array<string,mixed> $organisation
      * @param array<string,mixed> $contact
      */
+    /**
+     * Why the most recent send did not happen, in words a person can act on.
+     *
+     * The bool return says whether it worked; this says why it did not. Without
+     * it the only honest thing a screen can say is "check the logs", which is a
+     * wasted round trip for the reader and tells them nothing about whether the
+     * problem is theirs to fix.
+     */
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
+    private ?string $lastError = null;
+
     public function sendToContact(
         array $organisation,
         array $contact,
@@ -88,6 +119,8 @@ final class TransactionalMailer
         string $html,
         string $text = '',
     ): bool {
+        $this->lastError = null;
+
         // Transactional still respects hard bounces, invalid addresses, complaints
         // and legal holds — there is no point (and no right) mailing those.
         $decision = $this->compliance->canSendTransactionalEmail($organisation, $contact);
@@ -97,6 +130,10 @@ final class TransactionalMailer
                 'reason' => $decision->reason,
                 'email'  => \App\Support\Str::maskEmail((string) $contact['email']),
             ]);
+
+            $this->lastError = $decision->message !== ''
+                ? $decision->message
+                : \App\Compliance\ReasonCode::describe((string) $decision->reason);
 
             return false;
         }
@@ -158,9 +195,40 @@ final class TransactionalMailer
                 'error' => $result->error,
                 'code'  => $result->errorCode,
             ]);
+
+            $this->lastError = $this->explain($result);
         }
 
         return $result->accepted;
+    }
+
+    /**
+     * Turn a provider error into something the reader can do something about.
+     *
+     * The commonest of these by far is a new account still in the provider's
+     * sandbox, where the only symptom is a refusal that says nothing about
+     * sandboxes. Somebody in that position will otherwise go back and check
+     * their DNS records, which are fine.
+     */
+    private function explain(\App\Mail\SendResult $result): string
+    {
+        $raw = (string) ($result->error ?? '');
+
+        if (str_contains($raw, 'not verified') || $result->errorCode === 'MessageRejected') {
+            return 'Amazon SES refused it because your account is still in its sandbox, '
+                . 'where you can only email addresses you have verified in the SES console. '
+                . 'Verify this address there, or request production access. (' . $raw . ')';
+        }
+
+        if ($result->errorCode === 'SES_NOT_CONFIGURED') {
+            return $raw;
+        }
+
+        if (str_contains($raw, 'Throttling') || $result->errorCode === 'TooManyRequestsException') {
+            return 'Your email provider is rate limiting you. Wait a minute and try again. (' . $raw . ')';
+        }
+
+        return $raw !== '' ? $raw : 'The email provider refused the message and gave no reason.';
     }
 
     private function recordMessage(

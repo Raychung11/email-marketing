@@ -74,46 +74,59 @@ final class View
         return $content;
     }
 
-    /** @param array<string,mixed> $data */
-    private function renderFile(string $template, array $data): string
+    /**
+     * Include a template with the given variables in scope.
+     *
+     * Every local in this method is prefixed with __view so it cannot collide
+     * with a view variable. extract() uses EXTR_SKIP, so a collision would mean
+     * the framework's local silently wins and the template renders with the wrong
+     * value — a view variable named $template or $data would break in a way that
+     * is very hard to see.
+     *
+     * @param array<string,mixed> $__viewData
+     */
+    private function renderFile(string $__viewName, array $__viewData): string
     {
-        $path = $this->resolve($template);
+        $__viewPath = $this->resolve($__viewName);
 
-        if (!is_file($path)) {
-            throw new \RuntimeException("View [{$template}] not found at {$path}.");
+        if (!is_file($__viewPath)) {
+            throw new \RuntimeException("View [{$__viewName}] not found at {$__viewPath}.");
         }
 
-        $variables = array_merge($this->shared, $data);
+        $__viewVariables = array_merge($this->shared, $__viewData);
 
-        // $__view is used by the helper methods inside templates.
+        // $__view is the one name templates are expected to use, for the section
+        // and include helpers.
         $__view = $this;
 
-        extract($variables, EXTR_SKIP);
+        extract($__viewVariables, EXTR_SKIP);
 
         ob_start();
 
         try {
-            include $path;
-        } catch (\Throwable $e) {
+            include $__viewPath;
+        } catch (\Throwable $__viewException) {
             ob_end_clean();
-            throw $e;
+            throw $__viewException;
         }
 
-        $output = (string) ob_get_clean();
+        $__viewOutput = (string) ob_get_clean();
 
-        // Capture scalars the template defined, skipping the framework's own
-        // locals and anything already supplied by the caller.
-        foreach (get_defined_vars() as $name => $value) {
-            if (in_array($name, ['__view', 'path', 'variables', 'data', 'template', 'output', 'e'], true)) {
+        // Carry scalars the template defined for itself — $title above all —
+        // through to the layout.
+        foreach (get_defined_vars() as $__viewLocal => $__viewValue) {
+            if (str_starts_with($__viewLocal, '__view')) {
                 continue;
             }
 
-            if (!array_key_exists($name, $variables) && (is_scalar($value) || $value === null)) {
-                $this->exported[$name] = $value;
+            if (!array_key_exists($__viewLocal, $__viewVariables)
+                && (is_scalar($__viewValue) || $__viewValue === null)
+            ) {
+                $this->exported[$__viewLocal] = $__viewValue;
             }
         }
 
-        return $output;
+        return $__viewOutput;
     }
 
     private function resolve(string $template): string

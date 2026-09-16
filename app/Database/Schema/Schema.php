@@ -17,7 +17,7 @@ final class Schema
     {
         $this->grammar = match ($connection->driver()) {
             'sqlite' => new SqliteGrammar(),
-            default  => new MySqlGrammar(),
+            default  => new MySqlGrammar($connection->charset(), $connection->collation()),
         };
     }
 

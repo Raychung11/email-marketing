@@ -91,6 +91,11 @@ return new class extends Migration {
             $table->char('currency', 3)->nullable();
             $table->integer('purchase_count')->default(0);
 
+            // Birthday and anniversary campaigns are bread and butter for
+            // dentists, salons and restaurants, so the dates behind them are
+            // first-class columns rather than custom fields.
+            $table->date('date_of_birth')->nullable();
+            $table->date('customer_since')->nullable();
             $table->dateTime('first_purchase_at')->nullable();
             $table->dateTime('last_purchase_at')->nullable();
             $table->dateTime('last_contact_at')->nullable();

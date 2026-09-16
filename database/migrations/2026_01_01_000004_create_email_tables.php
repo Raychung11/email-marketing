@@ -142,6 +142,11 @@ return new class extends Migration {
             $table->dateTime('approved_at')->nullable();
             $table->dateTime('send_started_at')->nullable();
             $table->dateTime('send_completed_at')->nullable();
+            // Set only when the recipient snapshot has been built to completion.
+            // A build that crashes or is paused half-way leaves this null, which
+            // is how the dispatcher knows to resume it rather than treat a
+            // partial audience as the whole audience.
+            $table->dateTime('snapshot_completed_at')->nullable();
             $table->enum('created_via', ['manual', 'ai', 'automation', 'template'])->default('manual');
             $table->bigInteger('ab_test_id')->unsigned()->nullable();
             $table->timestamps();
@@ -194,10 +199,19 @@ return new class extends Migration {
             $table->foreign('contact_id', 'contacts');
         });
 
-        $schema->create('campaign_links', static function (Blueprint $table): void {
+        /*
+         * Trackable links, owned by whatever sent them.
+         *
+         * Owner is a type plus an id rather than a nullable campaign_id, because
+         * an automation email has links too, and a nullable owner column would
+         * make the unique index below stop working (NULLs compare as distinct in
+         * both MySQL and SQLite, so every send would insert a fresh row).
+         */
+        $schema->create('tracked_links', static function (Blueprint $table): void {
             $table->id();
             $table->organisationId();
-            $table->foreignId('campaign_id');
+            $table->enum('owner_type', ['campaign', 'automation']);
+            $table->bigInteger('owner_id')->unsigned();
             $table->char('link_hash', 40);
             $table->text('original_url');
             $table->string('label', 160)->nullable();
@@ -205,9 +219,10 @@ return new class extends Migration {
             $table->integer('unique_click_count')->default(0);
             $table->dateTime('created_at');
 
-            $table->unique(['campaign_id', 'link_hash']);
-            $table->index(['organisation_id', 'campaign_id']);
-            $table->foreign('campaign_id', 'campaigns');
+            // One row per destination per sender, so the same link appearing
+            // three times in one email is one click count, not three.
+            $table->unique(['owner_type', 'owner_id', 'link_hash'], 'uniq_tracked_link');
+            $table->index(['organisation_id', 'owner_type', 'owner_id']);
         });
 
         $schema->create('campaign_ab_tests', static function (Blueprint $table): void {
@@ -303,7 +318,7 @@ return new class extends Migration {
             $table->string('bounce_subtype', 40)->nullable();
             $table->string('complaint_type', 40)->nullable();
             $table->text('clicked_url')->nullable();
-            $table->bigInteger('campaign_link_id')->unsigned()->nullable();
+            $table->bigInteger('tracked_link_id')->unsigned()->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->string('user_agent', 255)->nullable();
             $table->string('device_type', 30)->nullable();

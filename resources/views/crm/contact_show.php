@@ -27,7 +27,7 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
   <div class="page-head__actions">
     <a class="btn" href="/contacts/<?= (int) $contact['id'] ?>/edit">Edit</a>
     <form method="post" action="/contacts/<?= (int) $contact['id'] ?>/delete"
-          data-confirm="Delete this contact? Their suppression record and consent history are kept.">
+          data-confirm="Delete this contact? We keep their do-not-email record and permission history.">
       <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
       <button class="btn btn--danger" type="submit">Delete</button>
     </form>
@@ -99,23 +99,23 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
 
     <div class="card">
       <div class="card__head">
-        <h2>Consent history</h2>
-        <div class="card__actions"><span class="badge">Append-only</span></div>
+        <h2>Permission history</h2>
+        <div class="card__actions"><span class="badge">Nothing is ever deleted</span></div>
       </div>
       <div class="card__body">
         <p class="tiny muted mt-0">
-          Every entry is kept. A change of mind adds a row; nothing here is ever edited
-          or deleted, because the history is the evidence.
+          Every change is kept. If they change their mind we add a new line rather than editing the
+          old one — this list is your proof if anyone ever asks.
         </p>
 
         <?php if ($profile['consent_history'] === []): ?>
-          <p class="small muted mb-0">No consent has been recorded, so marketing email is blocked
-          wherever a consent basis is required.</p>
+          <p class="small muted mb-0">Nothing recorded yet, so we will not send this person marketing
+          email in countries where you need their say-so first.</p>
         <?php else: ?>
           <div class="table-wrap">
             <table class="data">
               <thead>
-                <tr><th>When</th><th>Channel</th><th>Status</th><th>Basis</th><th>Source</th><th>Evidence</th></tr>
+                <tr><th>When</th><th>How we reach them</th><th>What they said</th><th>How they agreed</th><th>Where from</th><th>Proof</th></tr>
               </thead>
               <tbody>
                 <?php foreach ($profile['consent_history'] as $row): ?>
@@ -154,38 +154,38 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
 
         <form method="post" action="/contacts/<?= (int) $contact['id'] ?>/consent">
           <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-          <h3 style="font-size:13px;margin:0 0 8px">Record a consent decision</h3>
+          <h3 style="font-size:13px;margin:0 0 8px">Add what they told you</h3>
           <div class="grid-3">
             <div class="field">
-              <label for="status">Status</label>
+              <label for="status">What did they say?</label>
               <select id="status" name="status" required>
-                <option value="granted">Granted</option>
-                <option value="withdrawn">Withdrawn</option>
-                <option value="denied">Denied</option>
-                <option value="unknown">Unknown</option>
+                <option value="granted">Yes, they agreed</option>
+                <option value="withdrawn">They have asked us to stop</option>
+                <option value="denied">They were asked and said no</option>
+                <option value="unknown">We do not know</option>
               </select>
             </div>
             <div class="field">
-              <label for="consent_type">Basis</label>
+              <label for="consent_type">How did they agree?</label>
               <select id="consent_type" name="consent_type">
-                <option value="express">Express (they opted in)</option>
-                <option value="legitimate_existing_relationship">Existing customer relationship</option>
-                <option value="inferred">Inferred</option>
-                <option value="other">Other</option>
+                <option value="express">They ticked a box or filled in a form</option>
+                <option value="legitimate_existing_relationship">They are an existing customer</option>
+                <option value="inferred">We assumed it from how we got their details</option>
+                <option value="other">Some other way</option>
               </select>
             </div>
             <div class="field">
-              <label for="reference">Evidence reference</label>
+              <label for="reference">Where is the proof?</label>
               <input id="reference" type="text" name="reference" maxlength="255"
                      placeholder="e.g. web form 12 Mar, call log #4821">
             </div>
           </div>
           <div class="field">
-            <label for="consent_text">Wording shown to the contact</label>
+            <label for="consent_text">What wording did they see?</label>
             <textarea id="consent_text" name="consent_text" maxlength="2000"
-                      placeholder="Paste the exact consent wording they agreed to. This is the evidence."></textarea>
+                      placeholder="Paste the wording that was next to the tick box. This is your proof."></textarea>
           </div>
-          <button class="btn btn--primary btn--sm" type="submit">Record consent</button>
+          <button class="btn btn--primary btn--sm" type="submit">Save</button>
         </form>
       </div>
     </div>
@@ -222,11 +222,11 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
   <div class="col col--narrow">
     <?php if ($suppression !== null): ?>
       <div class="card">
-        <div class="card__head"><h2>Suppressed</h2></div>
+        <div class="card__head"><h2>Do not email</h2></div>
         <div class="card__body">
           <p class="small mt-0">
-            This address is on the suppression list and will be skipped by every marketing send,
-            including after a re-import.
+            We will not send this address any marketing email. That stays true even if you upload
+            their details again.
           </p>
           <table class="data">
             <tbody>
@@ -236,7 +236,7 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
             </tbody>
           </table>
           <a class="btn btn--sm btn--block mt-2" href="/suppressions?search=<?= e(rawurlencode((string) $contact['email'])) ?>">
-            Manage in suppression list
+            Open the do-not-email list
           </a>
         </div>
       </div>
@@ -304,17 +304,17 @@ $currency    = (string) ($contact['currency'] ?: ($organisation['currency'] ?? '
     <?php endif; ?>
 
     <div class="card">
-      <div class="card__head"><h2>Privacy</h2></div>
+      <div class="card__head"><h2>If they ask to be forgotten</h2></div>
       <div class="card__body">
         <p class="tiny muted mt-0">
-          Anonymising clears personal fields in place and keeps the address suppressed, so the
-          erasure itself can be honoured. Consent history, suppression and audit records are
-          retained.
+          This wipes their name, phone number and other personal details for good. We keep their
+          address on the do-not-email list and keep the permission history — otherwise we could not
+          promise never to email them again, which is the thing they asked for.
         </p>
         <form method="post" action="/contacts/<?= (int) $contact['id'] ?>/anonymise"
-              data-confirm="Anonymise this contact? Personal details are cleared permanently and the address stays suppressed.">
+              data-confirm="Wipe this person's personal details? This cannot be undone, and we will never email them again.">
           <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-          <button class="btn btn--danger btn--sm btn--block" type="submit">Anonymise contact</button>
+          <button class="btn btn--danger btn--sm btn--block" type="submit">Wipe their details</button>
         </form>
       </div>
     </div>
