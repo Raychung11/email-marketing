@@ -70,6 +70,7 @@ final class SmokeTest extends TestCase
             '/lists',
             '/lists/' . $listId,
             '/campaigns',
+            '/outbox',
             '/campaigns/create',
             '/templates',
             '/templates/create',

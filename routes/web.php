@@ -21,6 +21,7 @@ use App\Controllers\FormAdminController;
 use App\Controllers\HealthController;
 use App\Controllers\LeadController;
 use App\Controllers\Marketing\CampaignController;
+use App\Controllers\Marketing\OutboxController;
 use App\Controllers\Marketing\TemplateController;
 use App\Controllers\OnboardingController;
 use App\Controllers\OrganisationController;
@@ -467,6 +468,14 @@ return static function (Router $router): void {
         ]);
         $router->post('/settings/custom-fields/{id}/delete', SettingsController::class . '@destroyCustomField', [
             RequirePermission::class . ':settings.manage',
+        ]);
+
+        // ------------------------------------------------------------- outbox
+        $router->get('/outbox', OutboxController::class . '@index', [
+            RequirePermission::class . ':campaigns.view',
+        ]);
+        $router->get('/outbox/export', OutboxController::class . '@export', [
+            RequirePermission::class . ':campaigns.view',
         ]);
 
         // ---------------------------------------------------------- campaigns

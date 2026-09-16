@@ -205,7 +205,12 @@ $validated = ($campaign['validated_at'] ?? null) !== null;
     <?php if ($report !== null && in_array($status, ['sending', 'completed', 'paused'], true)): ?>
       <?php $funnel = $report['funnel']; ?>
       <div class="card">
-        <div class="card__head"><h2>What happened</h2></div>
+        <div class="card__head">
+          <h2>What happened</h2>
+          <div class="card__actions">
+            <a class="btn btn--sm" href="/outbox?campaign=<?= (int) $campaign['id'] ?>&amp;days=0">Every message</a>
+          </div>
+        </div>
         <div class="card__body">
           <?php // Read live from email_messages, not the rollup counters, which
                 // are only recomputed when the send finishes. ?>

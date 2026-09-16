@@ -64,6 +64,92 @@ final class EmailMessageRepository extends Repository
         );
     }
 
+    /**
+     * The outbox query: one row per message, newest first.
+     *
+     * The filters map onto the two indexes this table already carries —
+     * (organisation_id, status, created_at) and (organisation_id,
+     * email_normalized) — so a busy account can still page through it.
+     *
+     * @param array<string,mixed> $filters
+     */
+    public function filtered(array $filters = []): \App\Database\QueryBuilder
+    {
+        return $this->matching($filters)
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc');
+    }
+
+    /**
+     * How many messages sit in each status, under the same filters as the list
+     * but ignoring the status filter itself — otherwise picking "Arrived" would
+     * leave every other total reading zero.
+     *
+     * @param  array<string,mixed> $filters
+     * @return array<string,int>
+     */
+    public function statusCounts(array $filters = []): array
+    {
+        unset($filters['status']);
+
+        // Deliberately built from matching() rather than filtered(): an ORDER BY
+        // on a column that is not in the GROUP BY is rejected under MySQL's
+        // ONLY_FULL_GROUP_BY, which is on by default in MySQL 8.
+        $rows = $this->matching($filters)
+            ->select('status', 'COUNT(*) AS total')
+            ->groupBy('status')
+            ->get();
+
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $counts[(string) $row['status']] = (int) $row['total'];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The filters, without an ordering, so both the list and the totals are read
+     * from exactly the same set of rows.
+     *
+     * @param array<string,mixed> $filters
+     */
+    private function matching(array $filters): \App\Database\QueryBuilder
+    {
+        $query = $this->scoped();
+
+        if (($filters['search'] ?? '') !== '') {
+            $query->where(
+                'email_normalized',
+                'like',
+                '%' . normalize_email((string) $filters['search']) . '%'
+            );
+        }
+
+        if (($filters['status'] ?? '') !== '') {
+            $query->where('status', '=', (string) $filters['status']);
+        }
+
+        if ((int) ($filters['campaign'] ?? 0) > 0) {
+            $query->where('campaign_id', '=', (int) $filters['campaign']);
+        }
+
+        if (($filters['class'] ?? '') !== '') {
+            $query->where('message_class', '=', (string) $filters['class']);
+        }
+
+        if ((int) ($filters['days'] ?? 0) > 0) {
+            // The injected clock, not time(): every other date rule in the
+            // application reads from it, and a window that disagreed with the
+            // created_at values the same repository writes would quietly return
+            // an empty log.
+            $query->where('created_at', '>=', $this->clock->agoString((int) $filters['days']));
+        }
+
+        return $query;
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function forContact(int $contactId, int $limit = 50): array
     {

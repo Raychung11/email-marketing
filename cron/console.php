@@ -459,6 +459,52 @@ switch ($command) {
         }
         break;
 
+    case 'mail:stats':
+        // The same numbers as the "Sent email" screen, for whoever is already at
+        // an SSH prompt. Reported per organisation because the console has no
+        // signed-in user and therefore no tenant to scope to.
+        $days  = max(1, (int) ($argv[2] ?? 30));
+        $byOrg = $container->make(App\Services\OutboxService::class)->totalsByOrganisation($days);
+
+        if ($byOrg === []) {
+            $out('No email has been queued in the last ' . $days . ' days.');
+            $out('');
+            $out('If you expected some, the worker is the first thing to check:');
+            $out('  ls -l storage/framework/*.heartbeat');
+            break;
+        }
+
+        $out('Email in the last ' . $days . ' days (UTC):');
+
+        foreach ($byOrg as $org => $counts) {
+            $of = static fn (string ...$statuses): int => array_sum(
+                array_map(static fn (string $status): int => $counts[$status] ?? 0, $statuses)
+            );
+
+            $handedOver = $of(...App\Support\MessageStatus::HANDED_OVER);
+            $arrived    = $of('delivered');
+
+            $out('');
+            $out('  ' . $org);
+            $out(sprintf('    %-22s %d', 'Sent (accepted)', $handedOver));
+            $out(sprintf(
+                '    %-22s %d%s',
+                'Arrived (confirmed)',
+                $arrived,
+                $handedOver > 0 ? sprintf('  (%.1f%%)', $arrived / $handedOver * 100) : ''
+            ));
+            $out(sprintf('    %-22s %d', 'Waiting to go out', $of('queued', 'sending')));
+            $out(sprintf('    %-22s %d', 'Bounced', $of('bounced', 'soft_bounced')));
+            $out(sprintf('    %-22s %d', 'Marked as spam', $of('complained')));
+            $out(sprintf('    %-22s %d', 'Never sent', $of(...App\Support\MessageStatus::NEVER_SENT)));
+        }
+
+        $out('');
+        $out('"Sent" means Amazon accepted it. "Arrived" needs a delivery notification');
+        $out('back from Amazon, so it always lags, and only arrives at all if the SNS');
+        $out('webhook is wired up. Per-message detail is on the Sent email screen.');
+        break;
+
     case 'help':
     default:
         $out('Available commands:');
@@ -470,6 +516,7 @@ switch ($command) {
             'db:seed'          => 'Run seeders (roles, permissions, plans, compliance rules)',
             'db:check'         => 'Verify core tables exist',
             'mail:check'       => 'Verify provider credentials and quota; add an address to check if SES will deliver to it',
+            'mail:stats'       => 'Count sent, arrived, bounced and failed email over the last N days (default 30)',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',

@@ -43,6 +43,7 @@ return [
         'permission' => 'campaigns.view',
         'children'   => [
             ['label' => 'Campaigns',         'route' => '/campaigns',        'permission' => 'campaigns.view'],
+            ['label' => 'Sent email',        'route' => '/outbox',           'permission' => 'campaigns.view'],
             ['label' => 'Templates',         'route' => '/templates',        'permission' => 'templates.manage'],
             ['label' => 'Write it for me',   'route' => '/ai/studio',        'permission' => 'ai.use'],
             ['label' => 'Content Library',   'route' => '/content-library',  'permission' => 'templates.manage', 'phase' => 6],
