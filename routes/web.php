@@ -440,6 +440,9 @@ return static function (Router $router): void {
         $router->post('/team/{id}/role', TeamController::class . '@changeRole', [
             RequirePermission::class . ':users.manage',
         ]);
+        $router->post('/team/{id}/resend', TeamController::class . '@resend', [
+            RequirePermission::class . ':users.manage',
+        ]);
         $router->post('/team/{id}/remove', TeamController::class . '@remove', [
             RequirePermission::class . ':users.manage',
         ]);

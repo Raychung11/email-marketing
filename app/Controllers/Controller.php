@@ -89,6 +89,18 @@ abstract class Controller
         return Response::redirect($to);
     }
 
+    /**
+     * For the half-success: the thing the user asked for did happen, but
+     * something downstream of it did not. Reporting these as a plain success is
+     * how a customer ends up waiting on an email that was never sent.
+     */
+    protected function withWarning(string $to, string $message): Response
+    {
+        $this->session->flash('warning', $message);
+
+        return Response::redirect($to);
+    }
+
     protected function page(Request $request): int
     {
         return max(1, $request->int('page', 1));

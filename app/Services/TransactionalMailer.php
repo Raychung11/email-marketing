@@ -58,8 +58,18 @@ final class TransactionalMailer
         return $this->send($email, 'Reset your ' . $appName . ' password', $html, $text);
     }
 
-    public function sendTeamInvitation(string $email, string $organisationName, string $inviterName, string $token): bool
-    {
+    /**
+     * $organisationId is what puts the invitation in the outbox. Without it the
+     * send leaves no trace at all, so "I invited them and they never got it"
+     * becomes unanswerable — which is precisely when someone goes looking.
+     */
+    public function sendTeamInvitation(
+        string $email,
+        string $organisationName,
+        string $inviterName,
+        string $token,
+        ?int $organisationId = null,
+    ): bool {
         $appName = (string) $this->config->get('app.name', 'AI Growth Hub');
         $url     = url('invitations/' . rawurlencode($token));
 
@@ -74,7 +84,13 @@ final class TransactionalMailer
 
         $text = "{$inviterName} has invited you to join {$organisationName} on {$appName}.\n\n{$url}\n";
 
-        return $this->send($email, 'Join ' . $organisationName . ' on ' . $appName, $html, $text);
+        return $this->send(
+            $email,
+            'Join ' . $organisationName . ' on ' . $appName,
+            $html,
+            $text,
+            $organisationId
+        );
     }
 
     /**

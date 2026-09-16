@@ -125,14 +125,30 @@ final class TeamService
         });
     }
 
-    public function sendInvitation(string $email, string $token): void
+    /**
+     * Send the invitation email.
+     *
+     * Returns whether the provider accepted it. The caller must not report the
+     * invitation as sent on the strength of the database row alone: the
+     * membership record and the email are two separate things, and a new account
+     * still in its provider's sandbox will happily write the first while the
+     * second is refused.
+     */
+    public function sendInvitation(string $email, string $token): bool
     {
-        $this->mailer->sendTeamInvitation(
+        return $this->mailer->sendTeamInvitation(
             $email,
             (string) ($this->tenant->organisation()['name'] ?? ''),
             $this->auth->displayName(),
-            $token
+            $token,
+            $this->tenant->organisationId()
         );
+    }
+
+    /** Why the last invitation email did not go out, in words the inviter can act on. */
+    public function lastMailError(): ?string
+    {
+        return $this->mailer->lastError();
     }
 
     /**
@@ -233,6 +249,51 @@ final class TeamService
         $this->audit->log('user_removed', 'user', (int) $membership['user_id'], null, [
             'membership_id' => $membershipId,
         ]);
+    }
+
+    /**
+     * Issue a fresh invitation for someone who is already pending.
+     *
+     * A new token rather than a resend of the old one: the seven-day expiry is
+     * counted from the invitation, and someone chasing a colleague a week later
+     * should not be handed a link that has already lapsed. Re-issuing also
+     * invalidates the previous link, which is the right behaviour if the first
+     * one went astray.
+     *
+     * @return array{email:string,token:string,sent:bool}
+     */
+    public function resendInvitation(int $membershipId): array
+    {
+        $membership = $this->requireMembership($membershipId);
+
+        if ((string) $membership['status'] !== 'invited') {
+            throw new ValidationException([
+                'member' => ['That person has already accepted their invitation.'],
+            ]);
+        }
+
+        $user = $this->users->findById((int) $membership['user_id']);
+
+        if ($user === null) {
+            throw HttpException::notFound();
+        }
+
+        $token = bin2hex(random_bytes(32));
+
+        $this->memberships->update($membershipId, [
+            'invite_token_hash' => hash('sha256', $token),
+            'invite_expires_at' => $this->clock->now()->modify('+7 days')->format('Y-m-d H:i:s'),
+        ]);
+
+        $this->audit->log('user_invite_resent', 'user', (int) $membership['user_id'], null, [
+            'email' => \App\Support\Str::maskEmail((string) $user['email']),
+        ]);
+
+        return [
+            'email' => (string) $user['email'],
+            'token' => $token,
+            'sent'  => $this->sendInvitation((string) $user['email'], $token),
+        ];
     }
 
     /** @return array<string,mixed> */
