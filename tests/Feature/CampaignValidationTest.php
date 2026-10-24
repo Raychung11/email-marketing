@@ -177,6 +177,39 @@ final class CampaignValidationTest extends TestCase
         $this->assertContainsString(ReasonCode::ORG_DAILY_LIMIT_REACHED, $this->codes($result['blocking']));
     }
 
+    /**
+     * The validator used to run its own COUNT with its own day boundary:
+     * midnight UTC, because the clock is UTC, while the dispatcher used midnight
+     * in the organisation's timezone. Eight hours apart for a tenant in +08,
+     * which is the difference between approving a campaign and refusing it. One
+     * object answers the question now, so the two cannot disagree.
+     */
+    public function testTheValidatorMeasuresTheDayTheSameWayTheDispatcherDoes(): void
+    {
+        $organisation                     = $this->configuredOrganisation('US');
+        $organisation['timezone']         = 'Asia/Kuala_Lumpur';
+        $organisation['daily_send_limit'] = 10;
+
+        /** @var \App\Services\SendBudget $budgets */
+        $budgets = $this->container->make(\App\Services\SendBudget::class);
+
+        // Frozen at 2026-06-15 12:00 UTC; their day began at 16:00 UTC on the 14th.
+        $this->assertSame('2026-06-14 16:00:00', $budgets->dayStartUtc($organisation));
+
+        $result = $this->validator()->validate($this->campaign(), $organisation, ['eligible' => 11]);
+
+        $this->assertFalse($result['valid']);
+        $this->assertContainsString(ReasonCode::ORG_DAILY_LIMIT_REACHED, $this->codes($result['blocking']));
+
+        $result = $this->validator()->validate($this->campaign(), $organisation, ['eligible' => 10]);
+
+        $this->assertNotContainsString(
+            ReasonCode::ORG_DAILY_LIMIT_REACHED,
+            $this->codes($result['blocking']),
+            'Exactly the allowance is allowed'
+        );
+    }
+
     public function testAPausedOrSuspendedOrganisationCannotSend(): void
     {
         $organisation                   = $this->configuredOrganisation('US');

@@ -131,6 +131,41 @@ final class SendCampaignEmail implements Queueable
             return;
         }
 
+        /*
+         * THE WHOLE ORGANISATION IS HELD, AND THIS IS WHERE THE AUDIENCE USED
+         * TO BE BURNED.
+         *
+         * Suspension and an administrator's (or anti-abuse's) sending pause were
+         * only ever checked by the dispatcher, before enqueueing. Jobs already
+         * on the queue ran on, reached the per-contact compliance check below —
+         * which does test both conditions — and were marked `skipped`
+         * permanently, as though each individual contact had been found
+         * ineligible.
+         *
+         * So a one-hour deliverability pause destroyed every send in flight:
+         * `remaining()` dropped to zero, the campaign reported itself COMPLETE,
+         * and thousands of people were simply never written to. Lifting the hold
+         * brought none of them back, because nothing looks at `skipped` again.
+         *
+         * A hold is temporary and applies to everybody. The recipient goes back
+         * in the pool with a delay instead, and because this runs before the
+         * claim it costs no attempt either. The dispatcher will not re-enqueue
+         * while the hold stands, so these rows simply wait.
+         */
+        $hold = $this->organisationHold($organisation);
+
+        if ($hold !== null) {
+            $this->recipients->deferUnclaimed($recipientId, $this->holdRetrySeconds());
+
+            $this->logger->info('Deferring send: sending is held for this organisation', [
+                'campaign'     => $campaignId,
+                'organisation' => (int) ($organisation['id'] ?? 0),
+                'reason'       => $hold,
+            ]);
+
+            return;
+        }
+
         $recipient = $this->recipients->findForCampaign($campaignId, $recipientId);
 
         if ($recipient === null) {
@@ -172,6 +207,24 @@ final class SendCampaignEmail implements Queueable
         $decision = $this->compliance->canSendMarketingEmail($organisation, $contact, $campaign);
 
         if ($decision->blocked()) {
+            /*
+             * The organisation can be held between the check above and this
+             * one. Narrow, but the consequence of getting it wrong is the
+             * permanent loss described above, so the reason decides the
+             * treatment rather than where it was raised: a hold releases the
+             * recipient, a per-contact finding closes it.
+             */
+            if ($this->isOrganisationHold($decision->reason)) {
+                $this->recipients->release($recipientId, $token, $this->holdRetrySeconds());
+
+                $this->logger->info('Deferring send: sending was held mid-flight', [
+                    'campaign' => $campaignId,
+                    'reason'   => $decision->reason,
+                ]);
+
+                return;
+            }
+
             $this->recipients->markSkipped(
                 $recipientId,
                 $token,
@@ -377,6 +430,39 @@ final class SendCampaignEmail implements Queueable
         );
 
         throw new \RuntimeException('Provider temporarily unavailable: ' . (string) $result->error);
+    }
+
+    /**
+     * The reason code for an organisation-wide hold, or null if there is none.
+     *
+     * Both conditions are temporary from this job's point of view: an
+     * administrator lifts a pause, and a suspension is reviewed. Neither says
+     * anything about the contact in front of us, so neither may close the
+     * recipient out.
+     *
+     * @param array<string,mixed> $organisation
+     */
+    private function organisationHold(array $organisation): ?string
+    {
+        if ((string) ($organisation['status'] ?? 'active') === 'suspended') {
+            return ReasonCode::ORG_SUSPENDED;
+        }
+
+        if ((int) ($organisation['sending_paused'] ?? 0) === 1) {
+            return ReasonCode::ORG_SENDING_PAUSED;
+        }
+
+        return null;
+    }
+
+    private function isOrganisationHold(string $reason): bool
+    {
+        return in_array($reason, [ReasonCode::ORG_SUSPENDED, ReasonCode::ORG_SENDING_PAUSED], true);
+    }
+
+    private function holdRetrySeconds(): int
+    {
+        return max(60, (int) $this->config->get('mail.throttle.organisation_hold_retry_seconds', 900));
     }
 
     /**

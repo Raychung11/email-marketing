@@ -45,22 +45,23 @@ final class EmailMessageRepository extends Repository
 
     /**
      * How many marketing messages this organisation has handed to a provider
-     * today, in its own timezone.
+     * since a given UTC instant.
      *
-     * The daily limit is a calendar-day limit as the customer understands it, not
-     * a rolling 24 hours, so the window is computed in their timezone.
+     * The window is passed in rather than derived here. Working out where the
+     * organisation's day starts is the one piece of this that was done twice,
+     * differently, in two callers, and it now lives in SendBudget — which is
+     * also the only thing that knows this count is not the whole answer.
+     *
+     * Every attempted handoff counts, successful or not: the daily limit is a
+     * ceiling on attempts, and counting only successes lets a tenant with a
+     * failing provider retry straight past it.
      */
-    public function sentToday(string $timezone): int
+    public function marketingSentSince(string $sinceUtc): int
     {
-        $start = (new \DateTimeImmutable('now', new \DateTimeZone($timezone)))
-            ->setTime(0, 0)
-            ->setTimezone(new \DateTimeZone('UTC'))
-            ->format('Y-m-d H:i:s');
-
         return (int) $this->connection->scalar(
             "SELECT COUNT(*) FROM email_messages
              WHERE organisation_id = ? AND message_class = 'marketing' AND created_at >= ?",
-            [$this->organisationId(), $start]
+            [$this->organisationId(), $sinceUtc]
         );
     }
 

@@ -613,6 +613,64 @@ final class CampaignRecipientRepository extends Repository
             ->count();
     }
 
+    /**
+     * Sends this organisation has already committed to across every campaign.
+     *
+     * A `queued` row has a job waiting for it, so the daily allowance is
+     * already spent on it even though no message exists yet. Counting only
+     * messages is what let one tick's budget be handed out again by the next.
+     *
+     * `sending` is deliberately not counted here: the worker writes the message
+     * row before calling the provider, so those rows are counted by the message
+     * side instead and would otherwise be counted twice.
+     *
+     * Not filtered by date. Anything still outstanding is still going to be
+     * sent, whichever day it was committed on.
+     */
+    public function committedSends(): int
+    {
+        return $this->scoped()
+            ->where('send_status', '=', 'queued')
+            ->count();
+    }
+
+    /**
+     * Put a recipient back in the pool without having claimed it.
+     *
+     * For the one case that is neither a failure nor a compliance decision: the
+     * whole organisation is held — suspended, or sending paused by an
+     * administrator or by anti-abuse — while its jobs are already on the queue.
+     *
+     * That used to be read as a per-contact compliance block, so every job in
+     * flight marked its recipient `skipped` permanently. A one-hour
+     * deliverability pause burned the entire outstanding audience: `remaining()`
+     * fell to zero, the campaign reported itself complete, and nobody was ever
+     * written to. The hold is temporary and the mail has to survive it.
+     *
+     * No lock token, because this runs before the claim — so no attempt is
+     * burned either. `pending` is accepted as well as `queued` so a redelivered
+     * job is a no-op rather than an error.
+     */
+    public function deferUnclaimed(int $recipientId, int $retryAfterSeconds): bool
+    {
+        return $this->connection->execute(
+            "UPDATE campaign_recipients
+                SET send_status = 'pending',
+                    retry_after = ?,
+                    lock_token = NULL,
+                    claimed_at = NULL,
+                    lease_expires_at = NULL
+              WHERE organisation_id = ?
+                AND id = ?
+                AND send_status IN ('pending', 'queued')",
+            [
+                $this->clock->now()->modify('+' . max(0, $retryAfterSeconds) . ' seconds')->format('Y-m-d H:i:s'),
+                $this->organisationId(),
+                $recipientId,
+            ]
+        ) > 0;
+    }
+
     public function deleteForCampaign(int $campaignId): int
     {
         return $this->scoped()->where('campaign_id', '=', $campaignId)->delete();
