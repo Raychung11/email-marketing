@@ -328,6 +328,22 @@ What is covered, and why each one exists:
 | Security | SQL injection, CSRF, IDOR, privilege escalation, session fixation, CSV formula injection, credential redaction |
 | AI safety | the guard refuses to send, change consent, clear suppression or write SQL — in code, not in a prompt |
 
+### The MySQL path
+
+```bash
+php tests/mysql/verify.php        # needs DB_DRIVER=mysql; use a scratch database
+```
+
+The suite above runs on SQLite, which is the right default — it needs no
+services and finishes in half a minute. The cost is a handful of statements it
+can never execute: the `ON DUPLICATE KEY` upsert in the rate-limit store (SQLite
+takes `ON CONFLICT`, a different statement), `DELETE ... LIMIT`, the raw UPDATEs
+that carry the send pipeline's concurrency control, and the conditional UPDATE
+that makes a password-reset token single-use. A syntax or binding error in any
+of those passes CI and fails in production, so this script runs them against a
+real server. It writes to the database in `.env` and cleans up after itself;
+point it at a scratch copy, never at production.
+
 PHPUnit is declared in `require-dev` and is compatible; `tests/run.php` is what CI
 uses today because it has no dependencies.
 
