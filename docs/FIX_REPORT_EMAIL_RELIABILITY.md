@@ -623,16 +623,34 @@ findings list.
 ### Before
 
 1. **Back up the database.** `sh deploy/hostinger/backup.sh` from the
-   application root. The migrations
-   are additive but `send_status` changes type on a table that may be large.
-2. **Check how long migration `000001` will take.**
-   `SELECT COUNT(*) FROM campaign_recipients;` Under ~100k rows it is seconds.
-   Above that, the `MODIFY COLUMN` rewrites the table — do it in a maintenance
-   window.
-3. **No campaign in flight.** `php cron/console.php send:doctor` should show
-   `Recipients committed 0` and `Jobs waiting 0`. Pause anything sending and let
-   the workers drain first. Migrating mid-campaign is safe but it means
-   reconciling by hand afterwards.
+   application root. The migrations are additive but `send_status` changes type
+   on a table that may be large.
+
+2. **Take these three numbers first.** Plain SQL, read-only, and they decide
+   everything else about this deploy. `send:doctor` cannot answer them yet — it
+   is part of this change, and it reads columns that do not exist until the
+   migrations have run.
+
+   ```sql
+   -- How long migration 000001 will take. Under ~100k rows it is seconds;
+   -- above that the MODIFY COLUMN rewrites the table, so use a window.
+   SELECT COUNT(*) FROM campaign_recipients;
+
+   -- The historical liability from §1. These are the rows that say "sent"
+   -- about an email that may never have been sent. Section 11 is about them.
+   SELECT COUNT(*) FROM campaign_recipients
+    WHERE send_status = 'sent' AND email_message_id IS NULL;
+
+   -- Anything in flight. Should be 0 before you migrate.
+   SELECT COUNT(*) FROM campaign_recipients WHERE send_status = 'queued';
+   SELECT COUNT(*) FROM jobs;
+   ```
+
+3. **Nothing in flight.** The last two counts should be zero. Pause anything
+   sending and let the workers drain first. Migrating mid-campaign does not
+   corrupt anything, but it leaves rows to reconcile by hand that did not need
+   reconciling.
+
 4. **Tell people they will be signed out.** Everyone signs in once more (§5).
 
 ### Deploy
