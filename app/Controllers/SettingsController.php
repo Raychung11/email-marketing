@@ -10,6 +10,7 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Core\View;
 use App\Repositories\CustomFieldRepository;
+use App\Services\ApiKeyService;
 use App\Services\AuthManager;
 use App\Services\AuthService;
 use App\Services\OrganisationService;
@@ -25,6 +26,7 @@ final class SettingsController extends Controller
         private readonly CustomFieldRepository $customFields,
         private readonly AuthService $authService,
         private readonly AuthManager $auth,
+        private readonly ApiKeyService $apiKeys,
         private readonly TenantContext $tenant,
     ) {
         parent::__construct($view, $session, $config);
@@ -161,7 +163,14 @@ final class SettingsController extends Controller
 
     public function profile(Request $request): Response
     {
-        return $this->render('settings.profile', ['user' => $this->auth->userOrFail()]);
+        return $this->render('settings.profile', [
+            'user' => $this->auth->userOrFail(),
+            // Only shown to somebody who could act on it. Telling a marketer
+            // there are three API keys they cannot do anything about is noise.
+            'activeApiKeys' => $this->auth->can('integrations.manage')
+                ? $this->apiKeys->activeCount()
+                : null,
+        ]);
     }
 
     public function changePassword(Request $request): Response
@@ -185,6 +194,37 @@ final class SettingsController extends Controller
             return $this->withError('/settings/profile', 'Your current password is not correct.');
         }
 
-        return $this->withSuccess('/settings/profile', 'Password changed.');
+        return $this->withSuccess(
+            '/settings/profile',
+            'Password changed. Anyone signed in to this account elsewhere has been signed out.'
+        );
+    }
+
+    /**
+     * Revoke every API key for this organisation.
+     *
+     * Explicit and user-initiated on purpose. A password reset revokes sessions
+     * but deliberately leaves API keys alone: they are separate credentials,
+     * and quietly breaking an integration — whose only symptom is a 401 nobody
+     * can explain — is not a thing to do on an inference. Somebody who thinks
+     * their keys are compromised presses this, having read what it does.
+     */
+    public function revokeApiKeys(Request $request): Response
+    {
+        $this->auth->authorise('integrations.manage');
+
+        $revoked = $this->apiKeys->revokeAllForOrganisation();
+
+        if ($revoked === 0) {
+            return $this->withSuccess('/settings/profile', 'There were no API keys to revoke.');
+        }
+
+        return $this->withSuccess('/settings/profile', sprintf(
+            '%d API key%s revoked. Any integration using %s will now be refused, so issue '
+            . 'a replacement for anything you still need.',
+            $revoked,
+            $revoked === 1 ? '' : 's',
+            $revoked === 1 ? 'it' : 'them'
+        ));
     }
 }

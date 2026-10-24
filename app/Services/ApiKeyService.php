@@ -161,6 +161,72 @@ final class ApiKeyService
         return $updated > 0;
     }
 
+    /**
+     * Revoke every live key this organisation has, and return how many.
+     *
+     * The deliberate, visible counterpart to the session revocation a password
+     * reset performs. A reset does NOT touch API keys: they are separate
+     * credentials, and silently breaking a customer's integration — where the
+     * only symptom is a 401 nobody can explain — is not something to do on an
+     * inference about what the person was worried about. So it is a button they
+     * press, having read what it does.
+     *
+     * One conditional UPDATE guarded on `revoked_at IS NULL`, so a key revoked
+     * a moment ago by somebody else keeps its original timestamp rather than
+     * having this one written over it.
+     *
+     * The audit record keeps the key ids and names, which identify a key
+     * without being a credential. Never the hash: that IS the credential, as
+     * far as anybody holding a database dump is concerned.
+     */
+    public function revokeAllForOrganisation(): int
+    {
+        $live = $this->connection->table('api_keys')
+            ->where('organisation_id', '=', $this->tenant->organisationId())
+            ->whereNull('revoked_at')
+            ->get();
+
+        if ($live === []) {
+            return 0;
+        }
+
+        $revoked = $this->connection->table('api_keys')
+            ->where('organisation_id', '=', $this->tenant->organisationId())
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => $this->clock->nowString()]);
+
+        if ($revoked > 0) {
+            $this->audit->log('api_keys_revoked_all', 'api_key', null, null, [
+                'count' => $revoked,
+                'keys'  => array_map(
+                    static fn (array $row): array => [
+                        'id'   => (int) $row['id'],
+                        'name' => (string) $row['name'],
+                    ],
+                    $live
+                ),
+            ]);
+        }
+
+        return $revoked;
+    }
+
+    /** How many keys would still authenticate a request right now. */
+    public function activeCount(): int
+    {
+        $now = $this->clock->nowString();
+
+        return $this->connection->table('api_keys')
+            ->where('organisation_id', '=', $this->tenant->organisationId())
+            ->whereNull('revoked_at')
+            // An expired key is already refused by resolve(), so counting it as
+            // active would overstate what revoking achieves.
+            ->whereGroup(static function ($query) use ($now): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', $now);
+            })
+            ->count();
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function forOrganisation(): array
     {

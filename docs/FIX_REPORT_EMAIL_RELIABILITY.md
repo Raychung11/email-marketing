@@ -329,9 +329,16 @@ as stale. That is the fail-closed direction. It is in the deploy checklist
 below.
 
 **API keys are deliberately not revoked** by a password reset. They are separate
-credentials with their own lifecycle, and silently breaking a customer's
-integration is not something to do without asking. If you want that, it is a
-small addition — say so and it goes in.
+credentials with their own lifecycle, and quietly breaking a customer's
+integration — whose only symptom is a 401 nobody can explain — is not something
+to do on an inference about what the person was worried about.
+
+So it is a control they press instead. **Profile → API keys** shows how many
+keys can still authenticate a request and offers *Revoke all API keys*, behind
+`integrations.manage` and a confirmation naming the count. The page says in so
+many words that changing a password does not touch them. Somebody who thinks a
+key has leaked has an answer that takes one click; nobody has an integration
+broken by a side effect they were never told about.
 
 ---
 
@@ -504,9 +511,26 @@ attempt ceiling · a job in `failed_jobs` whose recipient still looks live ·
 campaigns sending with nothing ready · unpruned rate-limit rows. Each finding
 carries what to do about it.
 
-**Email addresses are masked, with no flag to turn it off.** The row id is
-printed instead, which is what somebody entitled to see the address uses to look
-it up through the application. A diagnostic that dumps a tenant's address list
+For doing the work rather than finding it, there is an export:
+
+```
+php cron/console.php send:export --masked
+php cron/console.php send:export --with-addresses [--out=FILE]
+```
+
+One CSV row per recipient somebody has to settle, with the campaign and the
+organisation named, both sets in one pass under a `finding` column. There is no
+default for masking: masked is useless for matching against a provider's log,
+unmasked writes a tenant's address list to disk, and neither is a sensible thing
+to do by accident, so running it with neither flag explains the two and exits.
+The file is created and `chmod 0600` before any address goes into it, under
+`storage/tmp` — outside the web root — and the output says to delete it
+afterwards. A UTF-8 BOM, because Excel otherwise mangles every non-ASCII
+campaign name.
+
+**In the terminal report, email addresses are masked with no flag to turn it
+off.** The row id is printed instead, which is what somebody entitled to see the
+address uses to look it up through the application. A diagnostic that dumps a tenant's address list
 into a terminal, a CI log or a support ticket is waiting for somebody to paste
 it. Asserted by a test that the plaintext address appears nowhere in the output,
 in any form.
@@ -531,17 +555,18 @@ PHP 8.4.19. `composer.json` requires `>=8.3`; no 8.4-only syntax was used.
 
 ```
 $ php tests/run.php
-OK — 518 tests, 1587 assertions in 31.58s
+OK — 532 tests, 1627 assertions in 33.90s
 ```
 
-Green at the baseline (482 tests, 1472 assertions) and after every commit. 36
-tests and 115 assertions added:
+Green at the baseline (482 tests, 1472 assertions) and after every commit. 50
+tests and 155 assertions added:
 
 | File | Covers |
 |---|---|
 | `tests/Security/SessionRevocationTest.php` (9) | §5 — revocation, the kept session, the unversioned session, single-use links, lockout clearing, the audit record |
 | `tests/Feature/DatabaseQueueSendTest.php` (7) | §1–§3 on the real database queue |
-| `tests/Feature/SendDiagnosticsTest.php` (12) | §8 — each finding, masking, and that nothing changes |
+| `tests/Feature/SendDiagnosticsTest.php` (17) | §8 — each finding, the export, masking, and that nothing changes |
+| `tests/Security/ApiKeyRevocationTest.php` (9) | the API-key control — reach, tenancy, permission, audit |
 | `tests/Feature/CampaignSendTest.php` (+7) | §6 — the budget across ticks, the org day boundary, the hold |
 | `tests/Feature/CampaignValidationTest.php` (+1) | §6 — validator and dispatcher agreeing |
 
@@ -724,9 +749,21 @@ first or the rollback re-sends mail.
 
 `send:doctor` will report historical rows marked `sent` with no message record.
 Each one is either a real send or the §1 bug's output, and nothing can tell them
-apart from here. **Check the provider's log before resending anything.**
-Resending a campaign to somebody who already received it is worse than the
-original bug.
+apart from here. `send:export --with-addresses` gives you the list in a
+spreadsheet to work through.
+
+**Check the provider's log before resending anything.** And be ready for the
+lookup to be impossible: these rows have no provider message id — by definition,
+since the message row was never written — so the only match is address and time,
+and if SES was never configured to publish events to somewhere durable, that
+history does not exist. No amount of looking will produce it.
+
+Then it is a judgement call on what the campaign was. Resending a marketing
+email to somebody who already received it raises the complaint rate, and
+complaint rate costs **every** tenant's deliverability, not just this one — so
+the safe default there is not to resend. A service reminder with a deadline is
+the opposite case. The export command prints this, because that is where the
+decision gets made.
 
 ### Unknown outcomes, from now on
 
