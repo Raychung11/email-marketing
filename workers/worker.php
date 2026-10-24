@@ -188,7 +188,7 @@ while (!$shouldStop) {
             // Retries go to the dedicated retry queue so a hot-looping failure
             // cannot starve first-attempt work.
             $retry = new Job(
-                'email_retry',
+                (string) $config->get('queue.retry_queue', 'email_retry'),
                 $job->jobClass,
                 $job->payload,
                 $job->organisationId,

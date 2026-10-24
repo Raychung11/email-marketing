@@ -31,6 +31,11 @@ return [
     // without a code change.
     'campaign_queue' => env('QUEUE_CAMPAIGN', 'email_marketing'),
 
+    // Where a retry goes, so a hot-looping failure cannot starve first-attempt
+    // work. Named here because the worker enqueues onto it and the diagnostic
+    // reports its depth, and a literal in both places is a literal that drifts.
+    'retry_queue' => 'email_retry',
+
     // Exponential backoff, then dead-letter. Permanent failures are not retried.
     'retry_backoff' => [60, 300, 1800, 7200],
     'max_attempts'  => 4,

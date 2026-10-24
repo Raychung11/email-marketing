@@ -11,6 +11,7 @@ declare(strict_types=1);
  *   php cron/console.php db:seed
  *   php cron/console.php key:generate
  *   php cron/console.php schema:sql [mysql|sqlite]
+ *   php cron/console.php send:doctor [--json]
  *   php cron/console.php route:list
  *   php cron/console.php org:create "Acme Plumbing" owner@acme.test
  *   php cron/console.php down | up
@@ -505,6 +506,121 @@ switch ($command) {
         $out('webhook is wired up. Per-message detail is on the Sent email screen.');
         break;
 
+    case 'send:doctor':
+        // Read-only, always. Every state it reports is one where sending again
+        // might put a second copy of an email in somebody's inbox, and nothing
+        // here may make that decision — a person has to, with the provider's own
+        // records in front of them. Addresses are masked with no way to turn
+        // that off; the row id is printed so whoever is entitled to see an
+        // address can look it up through the application.
+        $report = $container->make(App\Services\SendDiagnostics::class)->report();
+
+        if (in_array('--json', $args, true)) {
+            $out((string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            break;
+        }
+
+        $ago = static function (?int $seconds): string {
+            if ($seconds === null) {
+                return 'never';
+            }
+
+            return match (true) {
+                $seconds < 120   => $seconds . 's ago',
+                $seconds < 7200  => (int) round($seconds / 60) . 'm ago',
+                default          => (int) round($seconds / 3600) . 'h ago',
+            };
+        };
+
+        $out('Send pipeline report — ' . $report['generated_at'] . ' UTC');
+        $out('');
+        $out('  Scheduler last ran   ' . $ago($report['timers']['scheduler_seconds_ago']));
+        $out('  Worker last ran      ' . $ago($report['timers']['worker_seconds_ago']));
+        $out('');
+        $out('  Recipients committed ' . $report['queue']['recipients_queued']);
+        $out('  Jobs waiting         ' . $report['queue']['jobs_pending']
+            . ' (+' . $report['queue']['jobs_reserved'] . ' being worked on)');
+        $out('  Retry queue          ' . $report['queue']['retry_queue_depth']);
+        $out('  Dead letter          ' . $report['queue']['failed_jobs']);
+
+        if ($report['queue']['shortfall'] > 0) {
+            $out('');
+            $out('  ' . $report['queue']['shortfall'] . ' committed sends have no job waiting for them.');
+            $out('  Small differences are normal (retries, reserved rows). A large one means');
+            $out('  jobs were lost, and those recipients will wait for ever.');
+        }
+
+        if ($report['findings'] === []) {
+            $out('');
+            $out('Nothing needs attention.');
+            break;
+        }
+
+        foreach ($report['findings'] as $finding) {
+            $out('');
+            $out(str_repeat('-', 72));
+            $out($finding['title'] . ': ' . $finding['total']);
+            $out('');
+
+            foreach (wordwrap($finding['guidance'], 70, PHP_EOL) === ''
+                ? []
+                : explode(PHP_EOL, wordwrap($finding['guidance'], 70, PHP_EOL)) as $line) {
+                $out('  ' . $line);
+            }
+
+            if ($finding['rows'] === []) {
+                continue;
+            }
+
+            $out('');
+
+            // Columns sized to their contents, capped. A fixed width cuts a
+            // timestamp in half, and a timestamp cut in half is the one thing
+            // in this report somebody has to read exactly.
+            $columns = array_keys($finding['rows'][0]);
+            $widths  = [];
+
+            foreach ($columns as $column) {
+                $widths[$column] = strlen($column);
+
+                foreach ($finding['rows'] as $row) {
+                    $widths[$column] = min(40, max(
+                        $widths[$column],
+                        strlen((string) ($row[$column] ?? ''))
+                    ));
+                }
+            }
+
+            $line = static function (array $values) use ($columns, $widths): string {
+                $cells = [];
+
+                foreach ($columns as $column) {
+                    $cells[] = str_pad(
+                        substr((string) ($values[$column] ?? ''), 0, $widths[$column]),
+                        $widths[$column]
+                    );
+                }
+
+                return '  ' . rtrim(implode('  ', $cells));
+            };
+
+            $out($line(array_combine($columns, array_map('strtoupper', $columns))));
+
+            foreach ($finding['rows'] as $row) {
+                $out($line($row));
+            }
+
+            if ($finding['truncated']) {
+                $out('');
+                $out('  ... and more. Use --json, or query the table directly.');
+            }
+        }
+
+        $out('');
+        $out(str_repeat('-', 72));
+        $out('This command changes nothing. Every action it suggests is yours to take.');
+        break;
+
     case 'help':
     default:
         $out('Available commands:');
@@ -517,6 +633,7 @@ switch ($command) {
             'db:check'         => 'Verify core tables exist',
             'mail:check'       => 'Verify provider credentials and quota; add an address to check if SES will deliver to it',
             'mail:stats'       => 'Count sent, arrived, bounced and failed email over the last N days (default 30)',
+            'send:doctor'      => 'Read-only report on sends that need reconciliation; --json for machine output',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',
