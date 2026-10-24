@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Compliance\CampaignValidator;
+use App\Compliance\ReasonCode;
 use App\Core\Clock;
 use App\Core\Config;
 use App\Core\HttpException;
@@ -549,9 +550,34 @@ final class CampaignService
 
         $this->auth->authorise('campaigns.send');
 
+        /*
+         * Status first, then the sweep, and that order matters.
+         *
+         * The status is what makes every job that starts from here on return
+         * without sending. Only once it is set is it safe to put the already
+         * enqueued rows back, because nothing new can claim them in between.
+         *
+         * The sweep itself is the fix for work that used to vanish. A paused
+         * job returned early, the worker acknowledged it away, and the
+         * recipient stayed `queued` — which the dispatcher never looks at,
+         * since it only re-queues `pending`. Those people were never written
+         * to, and nothing ever said so.
+         */
         $this->campaigns->transition($id, ['sending', 'scheduled'], 'paused', ['pause_reason' => $reason]);
 
-        $this->audit->log('campaign_paused', 'campaign', $id, null, ['reason' => $reason]);
+        $released = $this->recipients->releaseForPause($id);
+
+        /*
+         * Messages already handed to the provider cannot be recalled, and rows
+         * a worker is holding right now are deliberately left alone — taking
+         * one back mid-flight is how pause causes a duplicate. Both are
+         * recorded so the number in the audit log is the number that actually
+         * stopped.
+         */
+        $this->audit->log('campaign_paused', 'campaign', $id, null, [
+            'reason'            => $reason,
+            'returned_to_queue' => $released,
+        ]);
     }
 
     public function resume(int $id): void
@@ -599,7 +625,21 @@ final class CampaignService
             ['pause_reason' => $reason]
         );
 
-        $this->audit->log('campaign_cancelled', 'campaign', $id, null, ['reason' => $reason]);
+        /*
+         * Cancelled is not paused, and sharing a code path with it would be the
+         * bug. Pause returns work to the pool so a resume can finish it;
+         * cancel closes it so nothing ever sends it again — including a resume,
+         * a redelivered job, or the next scheduler tick.
+         *
+         * Anything already given to the provider stays exactly as it is. It has
+         * gone, and no status written here can bring it back.
+         */
+        $closed = $this->recipients->skipForCancellation($id, ReasonCode::CAMPAIGN_CANCELLED);
+
+        $this->audit->log('campaign_cancelled', 'campaign', $id, null, [
+            'reason'       => $reason,
+            'not_sent'     => $closed,
+        ]);
     }
 
     public function duplicate(int $id): int
