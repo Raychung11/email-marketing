@@ -21,6 +21,14 @@ final class AuthManager
 {
     private const SESSION_USER_ID = 'auth_user_id';
     private const SESSION_ORG_ID  = 'auth_organisation_id';
+    /**
+     * The users.session_version this session was opened under.
+     *
+     * Compared on every authenticated request. Bumping the column is how a
+     * password reset reaches a session whose cookie we cannot see, on a device
+     * we do not know about.
+     */
+    private const SESSION_VERSION = 'auth_session_version';
 
     /** @var array<string,mixed>|null */
     private ?array $user = null;
@@ -47,11 +55,31 @@ final class AuthManager
         // Regenerate on privilege change: defeats session fixation.
         $this->session->regenerate();
         $this->session->put(self::SESSION_USER_ID, $userId);
+        $this->session->put(self::SESSION_VERSION, $this->users->sessionVersion($userId));
 
         if ($organisationId !== null) {
             $this->session->put(self::SESSION_ORG_ID, $organisationId);
         }
 
+        $this->reset();
+    }
+
+    /**
+     * Re-stamp this session after the account's sessions were revoked.
+     *
+     * Called by the one flow that revokes while the person is present — a
+     * password change from the settings page. Every other revocation leaves
+     * this session stale along with the rest, which is the point of it.
+     */
+    public function acceptSessionVersion(int $version): void
+    {
+        if ($this->session->get(self::SESSION_USER_ID) === null) {
+            return;
+        }
+
+        // A new password is a credential change, so the id moves with it.
+        $this->session->regenerate();
+        $this->session->put(self::SESSION_VERSION, $version);
         $this->reset();
     }
 
@@ -93,7 +121,38 @@ final class AuthManager
             return null;
         }
 
+        if (!$this->sessionVersionMatches($user)) {
+            // Not merely "unauthenticated for this request": the cookie is
+            // revoked, so the session is destroyed rather than left to be
+            // presented again on the next one.
+            $this->logout();
+
+            return null;
+        }
+
         return $this->user = $user;
+    }
+
+    /**
+     * Whether this session predates a revocation of the account's sessions.
+     *
+     * Fails closed on an absent value. A session carrying no version was opened
+     * before this control existed — or by something that bypassed login() — and
+     * in either case there is nothing to compare, so it is not accepted. One
+     * sign-in after deploy is the whole cost; the alternative is a check that
+     * any session can opt out of by not answering it.
+     *
+     * @param array<string,mixed> $user
+     */
+    private function sessionVersionMatches(array $user): bool
+    {
+        $held = $this->session->get(self::SESSION_VERSION);
+
+        if (!is_int($held) && !(is_string($held) && $held !== '')) {
+            return false;
+        }
+
+        return (int) $held === (int) ($user['session_version'] ?? 0);
     }
 
     /** @return array<string,mixed> */
