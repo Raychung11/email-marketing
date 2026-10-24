@@ -177,16 +177,33 @@ final class CampaignRecipientRepository extends Repository
      *
      * @return Generator<int,array<string,mixed>>
      */
-    public function pendingBatches(int $campaignId, int $batchSize = 500): Generator
+    public function pendingBatches(int $campaignId, int $batchSize = 500, int $maxAttempts = 0): Generator
     {
         $lastId = 0;
+        $now    = $this->now();
 
         do {
-            $rows = $this->scoped()
+            $query = $this->scoped()
                 ->where('campaign_id', '=', $campaignId)
                 ->where('eligibility_status', '=', 'eligible')
                 ->where('send_status', '=', 'pending')
-                ->where('id', '>', $lastId)
+                // A recipient waiting out its backoff is not work yet. Omitting
+                // this is what let the scheduler walk straight through the
+                // retry delay the queue had just imposed.
+                ->whereGroup(static function ($group) use ($now): void {
+                    $group->whereNull('retry_after')
+                          ->where('retry_after', '<=', $now, 'or');
+                })
+                ->where('id', '>', $lastId);
+
+            if ($maxAttempts > 0) {
+                // Belt as well as braces: failExhausted() closes these out, and
+                // this makes sure one is never handed out in the window before
+                // it runs.
+                $query->where('attempt_count', '<', $maxAttempts);
+            }
+
+            $rows = $query
                 ->orderBy('id')
                 ->limit($batchSize)
                 ->get();
@@ -371,7 +388,7 @@ final class CampaignRecipientRepository extends Repository
      * `email_messages` row, and leaving the recipient pointing at a failed
      * handoff would make the campaign report cite a message that never went.
      */
-    public function release(int $recipientId, string $token): bool
+    public function release(int $recipientId, string $token, int $retryAfterSeconds = 0): bool
     {
         return $this->ownedUpdate($recipientId, $token, [
             'send_status'           => 'pending',
@@ -381,7 +398,40 @@ final class CampaignRecipientRepository extends Repository
             'claimed_at'            => null,
             'lease_expires_at'      => null,
             'provider_attempted_at' => null,
+            // The same backoff the queue is about to apply to the job. Without
+            // it the scheduler re-queues this recipient on its next tick and
+            // the wait the provider asked for never happens.
+            'retry_after'           => $retryAfterSeconds > 0 ? $this->leaseUntil($retryAfterSeconds) : null,
         ]);
+    }
+
+    /**
+     * Close out recipients that have used every attempt they are going to get.
+     *
+     * Without this the scheduler enqueues them for ever: the row is `pending`,
+     * so it looks like work; the job claims it, fails, and releases it back.
+     * The queue's own retry ceiling never applies, because each tick creates a
+     * brand new first-attempt job.
+     */
+    public function failExhausted(int $campaignId, int $maxAttempts): int
+    {
+        return $this->connection->execute(
+            "UPDATE campaign_recipients
+                SET send_status = 'failed',
+                    last_error = ?,
+                    lock_token = NULL,
+                    lease_expires_at = NULL
+              WHERE organisation_id = ?
+                AND campaign_id = ?
+                AND send_status = 'pending'
+                AND attempt_count >= ?",
+            [
+                'Gave up after ' . $maxAttempts . ' attempts.',
+                $this->organisationId(),
+                $campaignId,
+                $maxAttempts,
+            ]
+        );
     }
 
     /**

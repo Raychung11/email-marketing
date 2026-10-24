@@ -100,6 +100,23 @@ final class CampaignDispatcher
             }
         }
 
+        /*
+         * Leases nobody is coming back for, first.
+         *
+         * A worker killed by the shared host leaves a row in `sending` that no
+         * job will ever revisit. Without this it sits there for ever, holding
+         * its campaign open and counting against nothing. The sweep is cheap,
+         * runs across tenants like the scan below, and is deliberately split:
+         * a recipient whose provider call provably never started goes back on
+         * the queue, and one that may have been sent is held for a person to
+         * settle rather than silently sent again.
+         */
+        $swept = $this->recipients->sweepExpiredLeases();
+
+        if ($swept['recovered'] > 0 || $swept['unknown'] > 0) {
+            $this->logger->warning('Recovered expired send leases', $swept);
+        }
+
         if ($candidates === []) {
             return $summary;
         }
@@ -363,7 +380,15 @@ final class CampaignDispatcher
         $queueName      = (string) $this->config->get('queue.campaign_queue', 'email_marketing');
         $queued         = 0;
 
-        foreach ($this->recipients->pendingBatches($campaignId, 500) as $batch) {
+        /*
+         * Recipients that have used every attempt are closed out before the
+         * scan, not after. Left `pending` they look like work for ever: the
+         * scheduler enqueues a fresh first-attempt job each tick, so the
+         * queue's retry ceiling never gets a chance to apply.
+         */
+        $this->recipients->failExhausted($campaignId, $this->queue->maxAttempts());
+
+        foreach ($this->recipients->pendingBatches($campaignId, 500, $this->queue->maxAttempts()) as $batch) {
             $dispatched = [];
 
             foreach ($batch as $row) {

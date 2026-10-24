@@ -87,6 +87,17 @@ return new class extends Migration {
          * somebody's inbox.
          */
         'provider_attempted_at' => ['DATETIME NULL', 'TEXT NULL'],
+        /*
+         * Not before this time may the scheduler enqueue this recipient again.
+         *
+         * The queue already backs a failed job off, but the recipient was put
+         * straight back to `pending` — and the scheduler re-queues `pending`
+         * every tick. So a provider having a bad minute was hammered once a
+         * minute by the scheduler while the retry queue politely waited two
+         * hours. The backoff only meant anything to one of the two things
+         * acting on it; now both read the same clock.
+         */
+        'retry_after' => ['DATETIME NULL', 'TEXT NULL'],
     ];
 
     public function up(Schema $schema, Connection $connection): void

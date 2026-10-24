@@ -14,6 +14,7 @@ use App\Mail\EmailRenderer;
 use App\Mail\OutboundMessage;
 use App\Queue\PermanentFailure;
 use App\Queue\Queueable;
+use App\Queue\QueueManager;
 use App\Repositories\CampaignRecipientRepository;
 use App\Repositories\CampaignRepository;
 use App\Repositories\ContactRepository;
@@ -49,6 +50,7 @@ final class SendCampaignEmail implements Queueable
         private readonly EmailRenderer $renderer,
         private readonly LinkTracker $links,
         private readonly EmailProviderInterface $provider,
+        private readonly QueueManager $queue,
         private readonly ActivityService $activity,
         private readonly TenantContext $tenant,
         private readonly Config $config,
@@ -358,7 +360,21 @@ final class SendCampaignEmail implements Queueable
          * recipient to the pool cannot duplicate anything — and the exception
          * is what puts the job on the retry queue with its backoff.
          */
-        $this->recipients->release($recipientId, $token);
+        /*
+         * Held back for exactly as long as the queue is about to hold the job.
+         *
+         * The recipient used to go straight back to `pending`, which the
+         * scheduler re-queues every tick — so a provider having a bad minute
+         * was retried once a minute by the scheduler while the retry queue
+         * waited out its two-hour backoff. One of the two was being ignored.
+         */
+        $attempt = (int) $recipient['attempt_count'] + 1;
+
+        $this->recipients->release(
+            $recipientId,
+            $token,
+            $this->queue->backoffFor(max(0, $attempt - 1)) ?? 0
+        );
 
         throw new \RuntimeException('Provider temporarily unavailable: ' . (string) $result->error);
     }
