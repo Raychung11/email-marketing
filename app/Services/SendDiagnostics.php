@@ -543,6 +543,73 @@ final class SendDiagnostics
         );
     }
 
+    // ------------------------------------------------------- reconciliation
+
+    /**
+     * Every row somebody has to settle, as a flat list ready for a spreadsheet.
+     *
+     * The terminal report is for finding out whether there is a problem. This is
+     * for doing the work: one row per recipient, with the campaign and the
+     * organisation named, so it can be matched against the provider's records
+     * or simply judged on what the campaign was.
+     *
+     * Two sets, distinguished by the `finding` column, because they reconcile
+     * differently:
+     *
+     *   sent_without_a_message  marked sent before the provider was called.
+     *                           There is no provider message id for these — by
+     *                           definition, since the message row was never
+     *                           written — so the only match is address and
+     *                           time.
+     *   outcome_unknown         the request left and the answer never came
+     *                           back. These do have a message row, so
+     *                           email_message_id and provider_attempted_at
+     *                           narrow the search.
+     *
+     * Still read-only. Still bounded by nothing: this is the export, so it
+     * returns everything rather than a sample.
+     *
+     * @param  bool $maskAddresses false puts real email addresses in the result
+     * @return array<int,array<string,mixed>>
+     */
+    public function unreconciled(bool $maskAddresses = true): array
+    {
+        /*
+         * The UNION is wrapped rather than ordered directly: SQLite will only
+         * ORDER BY a compound select's output column names, and which name an
+         * unaliased `r.organisation_id` ends up with is not something to depend
+         * on. Ordering the outer query is unambiguous on both drivers.
+         */
+        $rows = $this->connection->select(
+            "SELECT * FROM (
+             SELECT 'sent_without_a_message' AS finding,
+                    r.id AS recipient_id, r.contact_id, r.email,
+                    r.organisation_id, o.name AS organisation,
+                    r.campaign_id, c.name AS campaign, c.status AS campaign_status,
+                    c.send_started_at, r.sent_at, r.provider_attempted_at,
+                    r.email_message_id, r.attempt_count, r.last_error
+               FROM campaign_recipients r
+               JOIN campaigns c ON c.id = r.campaign_id
+               JOIN organisations o ON o.id = r.organisation_id
+              WHERE r.send_status = 'sent' AND r.email_message_id IS NULL
+              UNION ALL
+             SELECT 'outcome_unknown' AS finding,
+                    r.id AS recipient_id, r.contact_id, r.email,
+                    r.organisation_id, o.name AS organisation,
+                    r.campaign_id, c.name AS campaign, c.status AS campaign_status,
+                    c.send_started_at, r.sent_at, r.provider_attempted_at,
+                    r.email_message_id, r.attempt_count, r.last_error
+               FROM campaign_recipients r
+               JOIN campaigns c ON c.id = r.campaign_id
+               JOIN organisations o ON o.id = r.organisation_id
+              WHERE r.send_status = 'outcome_unknown'
+             ) AS needs_settling
+              ORDER BY organisation_id, campaign_id, recipient_id"
+        );
+
+        return $maskAddresses ? array_map([$this, 'mask'], $rows) : $rows;
+    }
+
     // ------------------------------------------------------------ internals
 
     /**

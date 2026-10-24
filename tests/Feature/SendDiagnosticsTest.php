@@ -175,6 +175,113 @@ final class SendDiagnosticsTest extends TestCase
         );
     }
 
+    // ------------------------------------------------------------- the export
+
+    public function testTheExportCarriesBothSetsWithTheirFindingNamed(): void
+    {
+        $first  = $this->seedCampaign('phantom@example.com');
+        $second = $this->seedCampaign('unknown@example.com');
+
+        $this->setRecipient($first['recipient_id'], [
+            'send_status'      => 'sent',
+            'email_message_id' => null,
+            'sent_at'          => $this->clock->nowString(),
+        ]);
+
+        $this->setRecipient($second['recipient_id'], [
+            'send_status'           => 'outcome_unknown',
+            'provider_attempted_at' => $this->clock->nowString(),
+        ]);
+
+        $rows = $this->doctor()->unreconciled();
+
+        $this->assertCount(2, $rows, 'Both sets, in one pass — that is how the work is done');
+
+        $findings = array_map(static fn (array $r): string => (string) $r['finding'], $rows);
+
+        $this->assertTrue(in_array('sent_without_a_message', $findings, true));
+        $this->assertTrue(in_array('outcome_unknown', $findings, true));
+    }
+
+    public function testTheExportNamesTheCampaignAndTheOrganisation(): void
+    {
+        $context = $this->seedCampaign();
+
+        $this->setRecipient($context['recipient_id'], [
+            'send_status'      => 'sent',
+            'email_message_id' => null,
+        ]);
+
+        $row = $this->doctor()->unreconciled()[0];
+
+        $this->assertSame('Report fixture', (string) $row['campaign'], 'Named, not just an id');
+        $this->assertNotSame('', (string) $row['organisation']);
+        $this->assertSame($context['recipient_id'], (int) $row['recipient_id']);
+    }
+
+    public function testTheExportMasksByDefaultAndOnlyUnmasksWhenAsked(): void
+    {
+        $context = $this->seedCampaign('someone.identifiable@example.com');
+
+        $this->setRecipient($context['recipient_id'], [
+            'send_status'      => 'sent',
+            'email_message_id' => null,
+        ]);
+
+        $this->assertSame(
+            's*******************@example.com',
+            (string) $this->doctor()->unreconciled()[0]['email'],
+            'The default is the safe one'
+        );
+
+        $this->assertSame(
+            'someone.identifiable@example.com',
+            (string) $this->doctor()->unreconciled(false)[0]['email'],
+            'Matching against a provider log needs the real address, so it is available'
+        );
+    }
+
+    public function testTheExportIgnoresRowsThatNeedNothing(): void
+    {
+        $context = $this->seedCampaign();
+
+        // A healthy send: sent, with a message row behind it.
+        $messageId = $this->connection->table('email_messages')->insert([
+            'organisation_id'  => $context['organisation_id'],
+            'uuid'             => uuid4(),
+            'campaign_id'      => $context['campaign_id'],
+            'message_class'    => 'marketing',
+            'email'            => 'recipient@example.com',
+            'email_normalized' => 'recipient@example.com',
+            'status'           => 'sent',
+            'created_at'       => $this->clock->nowString(),
+        ]);
+
+        $this->setRecipient($context['recipient_id'], [
+            'send_status'      => 'sent',
+            'email_message_id' => $messageId,
+        ]);
+
+        $this->assertSame([], $this->doctor()->unreconciled(), 'Nothing to settle');
+    }
+
+    public function testTheExportChangesNothing(): void
+    {
+        $context = $this->seedCampaign();
+
+        $this->setRecipient($context['recipient_id'], [
+            'send_status'      => 'sent',
+            'email_message_id' => null,
+        ]);
+
+        $before = $this->connection->select('SELECT * FROM campaign_recipients ORDER BY id');
+        $this->doctor()->unreconciled();
+        $this->doctor()->unreconciled(false);
+        $after = $this->connection->select('SELECT * FROM campaign_recipients ORDER BY id');
+
+        $this->assertSame(json_encode($before), json_encode($after));
+    }
+
     // ------------------------------------------------- what it must not do
 
     public function testEmailAddressesAreMasked(): void
