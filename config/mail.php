@@ -38,6 +38,11 @@ return [
         // workers drain as fast as they can, so bounding the queue is what
         // actually keeps the provider's rate limit intact.
         'dispatch_window_seconds' => 60,
+        // How long a job defers for when the whole organisation is held —
+        // suspended, or sending paused by an administrator or by anti-abuse.
+        // Matches the campaign dispatch tick, because that is what will pick
+        // the work back up once the hold is lifted.
+        'organisation_hold_retry_seconds' => 900,
     ],
 
     'tracking' => [

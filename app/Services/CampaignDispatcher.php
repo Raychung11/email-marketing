@@ -16,7 +16,6 @@ use App\Queue\QueueManager;
 use App\Queue\SyncQueueDriver;
 use App\Repositories\CampaignRecipientRepository;
 use App\Repositories\CampaignRepository;
-use App\Repositories\EmailMessageRepository;
 use App\Repositories\OrganisationRepository;
 use App\Support\TenantContext;
 use Throwable;
@@ -58,12 +57,12 @@ final class CampaignDispatcher
     public function __construct(
         private readonly CampaignRepository $campaigns,
         private readonly CampaignRecipientRepository $recipients,
-        private readonly EmailMessageRepository $messages,
         private readonly OrganisationRepository $organisations,
         private readonly CampaignService $campaignService,
         private readonly SegmentService $segments,
         private readonly ComplianceService $compliance,
         private readonly QueueManager $queue,
+        private readonly SendBudget $budgets,
         private readonly EmailProviderInterface $provider,
         private readonly TenantContext $tenant,
         private readonly Config $config,
@@ -98,6 +97,23 @@ final class CampaignDispatcher
             foreach ($set as $row) {
                 $candidates[(int) $row['id']] = $row;
             }
+        }
+
+        /*
+         * Leases nobody is coming back for, first.
+         *
+         * A worker killed by the shared host leaves a row in `sending` that no
+         * job will ever revisit. Without this it sits there for ever, holding
+         * its campaign open and counting against nothing. The sweep is cheap,
+         * runs across tenants like the scan below, and is deliberately split:
+         * a recipient whose provider call provably never started goes back on
+         * the queue, and one that may have been sent is held for a person to
+         * settle rather than silently sent again.
+         */
+        $swept = $this->recipients->sweepExpiredLeases();
+
+        if ($swept['recovered'] > 0 || $swept['unknown'] > 0) {
+            $this->logger->warning('Recovered expired send leases', $swept);
         }
 
         if ($candidates === []) {
@@ -363,7 +379,15 @@ final class CampaignDispatcher
         $queueName      = (string) $this->config->get('queue.campaign_queue', 'email_marketing');
         $queued         = 0;
 
-        foreach ($this->recipients->pendingBatches($campaignId, 500) as $batch) {
+        /*
+         * Recipients that have used every attempt are closed out before the
+         * scan, not after. Left `pending` they look like work for ever: the
+         * scheduler enqueues a fresh first-attempt job each tick, so the
+         * queue's retry ceiling never gets a chance to apply.
+         */
+        $this->recipients->failExhausted($campaignId, $this->queue->maxAttempts());
+
+        foreach ($this->recipients->pendingBatches($campaignId, 500, $this->queue->maxAttempts()) as $batch) {
             $dispatched = [];
 
             foreach ($batch as $row) {
@@ -457,17 +481,17 @@ final class CampaignDispatcher
      */
     public function budgetFor(array $organisation): int
     {
-        $budget = PHP_INT_MAX;
-
-        $dailyLimit = (int) ($organisation['daily_send_limit'] ?? 0);
-
-        if ($dailyLimit > 0) {
-            $sentToday = $this->messages->sentToday(
-                (string) ($organisation['timezone'] ?? 'UTC')
-            );
-
-            $budget = max(0, $dailyLimit - $sentToday);
-        }
+        /*
+         * SendBudget owns the daily side, and it counts work already committed
+         * as spent — not just messages already handed over. This used to be
+         * `dailyLimit - messagesCreatedToday`, which is a counter that only
+         * moves after the worker runs. Enqueueing happens here; the message row
+         * is written fifteen minutes of queue later. So every tick looked at a
+         * barely-moved counter and handed out the same allowance again, and a
+         * tenant capped at 500 a day could end up with tens of thousands of
+         * jobs queued that the workers would then faithfully send.
+         */
+        $budget = $this->budgets->remainingToday($organisation);
 
         if (!(bool) $this->config->get('mail.throttle.respect_provider_quota', true)) {
             return $this->capped($budget);

@@ -167,32 +167,89 @@ final class Application
             return new Encrypter((string) $c->make(Config::class)->get('app.key', ''));
         });
 
+        /*
+         * The rate-limit store, chosen on its own terms.
+         *
+         * It used to be chosen from `queue.driver`, which tied two unrelated
+         * decisions together and broke the important one: a deployment on the
+         * database queue — every shared host, including the one this runs on —
+         * silently got ArrayRateLimitStore. That is a PHP array, and every HTTP
+         * request is a fresh process, so the counter was empty every time.
+         * Login throttling, API key limits and the public endpoint limits were
+         * all present in code and absent in production.
+         *
+         * The database is a hard dependency of this application, so there is
+         * always a persistent option available. Production therefore never
+         * needs to fall back to memory, and does not.
+         */
         $c->singleton(RateLimitStore::class, static function (Container $c): RateLimitStore {
-            $driver = (string) $c->make(Config::class)->get('queue.driver', 'redis');
+            $config  = $c->make(Config::class);
+            $choice  = strtolower((string) $config->get('security.rate_limit.store', 'auto'));
+            $testing = (string) $config->get('app.env', 'production') === 'testing';
 
-            if ($driver === 'redis' && extension_loaded('redis')) {
-                try {
-                    $redisConfig = $c->make(Config::class)->get('queue.redis', []);
-                    $redis       = new Redis();
-                    $redis->connect(
-                        (string) ($redisConfig['host'] ?? '127.0.0.1'),
-                        (int) ($redisConfig['port'] ?? 6379),
-                        1.5
-                    );
+            $database = static fn (): RateLimitStore => new DatabaseRateLimitStore(
+                $c->make(Connection::class),
+                $c->make(Clock::class),
+                $c->make(Logger::class)
+            );
 
-                    if (($redisConfig['password'] ?? '') !== '') {
-                        $redis->auth((string) $redisConfig['password']);
+            if ($choice === 'array') {
+                /*
+                 * Asked for explicitly. Honoured outside production — the suite
+                 * wants it — and refused inside, where it would mean no limiter
+                 * at all. Setting it is a deliberate act, so this says so
+                 * rather than quietly doing something else.
+                 */
+                if ($testing || (bool) $config->get('security.rate_limit.force_insecure_store', false)) {
+                    return new ArrayRateLimitStore($c->make(Clock::class));
+                }
+
+                $c->make(Logger::class)->error(
+                    'RATE_LIMIT_STORE=array is not usable outside testing: counters would reset on every '
+                    . 'request, leaving login, API and public endpoints unlimited. Using the database '
+                    . 'instead. Set RATE_LIMIT_ALLOW_INSECURE=true only if you genuinely mean it.'
+                );
+
+                return $database();
+            }
+
+            if ($choice === 'redis' || $choice === 'auto') {
+                $redisConfig = (array) $config->get('queue.redis', []);
+
+                if (extension_loaded('redis')) {
+                    try {
+                        $redis = new Redis();
+                        $redis->connect(
+                            (string) ($redisConfig['host'] ?? '127.0.0.1'),
+                            (int) ($redisConfig['port'] ?? 6379),
+                            1.5
+                        );
+
+                        if (($redisConfig['password'] ?? '') !== '') {
+                            $redis->auth((string) $redisConfig['password']);
+                        }
+
+                        return new RedisRateLimitStore($redis);
+                    } catch (Throwable $e) {
+                        /*
+                         * Redis being unreachable must not take the site down,
+                         * and it must not quietly disable the limiter either.
+                         * The database is right there and works.
+                         */
+                        $c->make(Logger::class)->warning(
+                            'Redis is configured for rate limiting but could not be reached; '
+                            . 'using the database store for this process.',
+                            ['error' => $e->getMessage()]
+                        );
                     }
-
-                    return new RedisRateLimitStore($redis);
-                } catch (Throwable) {
-                    // Fall through: a missing Redis must not take the app down,
-                    // but the in-process limiter is per-worker only, so this is
-                    // logged loudly by the health check.
+                } elseif ($choice === 'redis') {
+                    $c->make(Logger::class)->warning(
+                        'RATE_LIMIT_STORE=redis but ext-redis is not loaded; using the database store.'
+                    );
                 }
             }
 
-            return new ArrayRateLimitStore($c->make(Clock::class));
+            return $database();
         });
 
         $c->singleton(RateLimiter::class, static fn (Container $c): RateLimiter

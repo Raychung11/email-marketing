@@ -114,6 +114,28 @@ $schedule('locks.prune', 60, static function () use ($connection, $clock): void 
 });
 
 /*
+ * Closed rate-limit windows.
+ *
+ * One row per key per window, so a public endpoint under any real traffic
+ * writes a row per IP per minute. Left alone that is millions of dead rows a
+ * month on a host that charges for the disk. Bounded per run so it never
+ * becomes a long lock on a table every request writes to.
+ */
+$schedule('rate_limits.prune', 60, static function () use ($container, $logger): void {
+    $store = $container->make(App\Core\RateLimitStore::class);
+
+    if (!$store instanceof App\Core\DatabaseRateLimitStore) {
+        return;
+    }
+
+    $removed = $store->purgeExpired();
+
+    if ($removed > 0) {
+        $logger->info('Pruned expired rate limit windows', ['removed' => $removed]);
+    }
+});
+
+/*
  * ---------------------------------------------------------------------------
  * Every 15 minutes
  * ---------------------------------------------------------------------------

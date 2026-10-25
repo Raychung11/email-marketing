@@ -43,6 +43,15 @@ final class ReasonCode
     public const US_OPTED_OUT       = 'US_OPTED_OUT';
 
     // Organisation level
+    /**
+     * Not a compliance decision: the sender stopped the campaign.
+     *
+     * It buckets as `blocked` like the other operational codes, which keeps it
+     * out of the suppression and consent figures a compliance report is read
+     * for. Nobody was held back because of who they are.
+     */
+    public const CAMPAIGN_CANCELLED = 'CAMPAIGN_CANCELLED';
+
     public const ORG_SENDING_PAUSED     = 'ORG_SENDING_PAUSED';
     public const ORG_SUSPENDED          = 'ORG_SUSPENDED';
     public const ORG_DAILY_LIMIT_REACHED = 'ORG_DAILY_LIMIT_REACHED';

@@ -11,6 +11,8 @@ declare(strict_types=1);
  *   php cron/console.php db:seed
  *   php cron/console.php key:generate
  *   php cron/console.php schema:sql [mysql|sqlite]
+ *   php cron/console.php send:doctor [--json]
+ *   php cron/console.php send:export --masked|--with-addresses [--out=FILE]
  *   php cron/console.php route:list
  *   php cron/console.php org:create "Acme Plumbing" owner@acme.test
  *   php cron/console.php down | up
@@ -505,6 +507,241 @@ switch ($command) {
         $out('webhook is wired up. Per-message detail is on the Sent email screen.');
         break;
 
+    case 'send:doctor':
+        // Read-only, always. Every state it reports is one where sending again
+        // might put a second copy of an email in somebody's inbox, and nothing
+        // here may make that decision — a person has to, with the provider's own
+        // records in front of them. Addresses are masked with no way to turn
+        // that off; the row id is printed so whoever is entitled to see an
+        // address can look it up through the application.
+        $report = $container->make(App\Services\SendDiagnostics::class)->report();
+
+        if (in_array('--json', $args, true)) {
+            $out((string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            break;
+        }
+
+        $ago = static function (?int $seconds): string {
+            if ($seconds === null) {
+                return 'never';
+            }
+
+            return match (true) {
+                $seconds < 120   => $seconds . 's ago',
+                $seconds < 7200  => (int) round($seconds / 60) . 'm ago',
+                default          => (int) round($seconds / 3600) . 'h ago',
+            };
+        };
+
+        $out('Send pipeline report — ' . $report['generated_at'] . ' UTC');
+        $out('');
+        $out('  Scheduler last ran   ' . $ago($report['timers']['scheduler_seconds_ago']));
+        $out('  Worker last ran      ' . $ago($report['timers']['worker_seconds_ago']));
+        $out('');
+        $out('  Recipients committed ' . $report['queue']['recipients_queued']);
+        $out('  Jobs waiting         ' . $report['queue']['jobs_pending']
+            . ' (+' . $report['queue']['jobs_reserved'] . ' being worked on)');
+        $out('  Retry queue          ' . $report['queue']['retry_queue_depth']);
+        $out('  Dead letter          ' . $report['queue']['failed_jobs']);
+
+        if ($report['queue']['shortfall'] > 0) {
+            $out('');
+            $out('  ' . $report['queue']['shortfall'] . ' committed sends have no job waiting for them.');
+            $out('  Small differences are normal (retries, reserved rows). A large one means');
+            $out('  jobs were lost, and those recipients will wait for ever.');
+        }
+
+        if ($report['findings'] === []) {
+            $out('');
+            $out('Nothing needs attention.');
+            break;
+        }
+
+        foreach ($report['findings'] as $finding) {
+            $out('');
+            $out(str_repeat('-', 72));
+            $out($finding['title'] . ': ' . $finding['total']);
+            $out('');
+
+            foreach (wordwrap($finding['guidance'], 70, PHP_EOL) === ''
+                ? []
+                : explode(PHP_EOL, wordwrap($finding['guidance'], 70, PHP_EOL)) as $line) {
+                $out('  ' . $line);
+            }
+
+            if ($finding['rows'] === []) {
+                continue;
+            }
+
+            $out('');
+
+            // Columns sized to their contents, capped. A fixed width cuts a
+            // timestamp in half, and a timestamp cut in half is the one thing
+            // in this report somebody has to read exactly.
+            $columns = array_keys($finding['rows'][0]);
+            $widths  = [];
+
+            foreach ($columns as $column) {
+                $widths[$column] = strlen($column);
+
+                foreach ($finding['rows'] as $row) {
+                    $widths[$column] = min(40, max(
+                        $widths[$column],
+                        strlen((string) ($row[$column] ?? ''))
+                    ));
+                }
+            }
+
+            $line = static function (array $values) use ($columns, $widths): string {
+                $cells = [];
+
+                foreach ($columns as $column) {
+                    $cells[] = str_pad(
+                        substr((string) ($values[$column] ?? ''), 0, $widths[$column]),
+                        $widths[$column]
+                    );
+                }
+
+                return '  ' . rtrim(implode('  ', $cells));
+            };
+
+            $out($line(array_combine($columns, array_map('strtoupper', $columns))));
+
+            foreach ($finding['rows'] as $row) {
+                $out($line($row));
+            }
+
+            if ($finding['truncated']) {
+                $out('');
+                $out('  ... and more. Use --json, or query the table directly.');
+            }
+        }
+
+        $out('');
+        $out(str_repeat('-', 72));
+        $out('This command changes nothing. Every action it suggests is yours to take.');
+        break;
+
+    case 'send:export':
+        // The terminal report tells you whether there is a problem. This is for
+        // doing the work: one row per recipient that somebody has to settle,
+        // with the campaign and the organisation named, in a file you can open
+        // in a spreadsheet next to the provider's records.
+        //
+        // Read-only, like the report. It changes nothing and resends nothing.
+        $withAddresses = in_array('--with-addresses', $args, true);
+        $masked        = in_array('--masked', $args, true);
+
+        if ($withAddresses === $masked) {
+            // No default, deliberately. Masked is useless for matching against
+            // a provider's log, and unmasked writes a tenant's address list to
+            // disk. Neither is a sensible thing to do by accident, so the
+            // choice has to be made rather than inherited.
+            $out('Choose one:');
+            $out('');
+            $out('  --masked           addresses as a*****@example.com. Safe to');
+            $out('                     share, enough to count and to see which');
+            $out('                     campaigns are affected.');
+            $out('  --with-addresses   real addresses. Needed to match rows against');
+            $out('                     your provider\'s log. Writes a tenant\'s');
+            $out('                     address list to disk — the file is created');
+            $out('                     0600, and deleting it afterwards is on you.');
+            $out('');
+            $out('  --out=FILE         where to write it. Defaults to a timestamped');
+            $out('                     file under storage/tmp, which is outside the');
+            $out('                     web root.');
+            exit(2);
+        }
+
+        $rows = $container->make(App\Services\SendDiagnostics::class)->unreconciled($masked);
+
+        if ($rows === []) {
+            $out('Nothing to reconcile. No recipient is marked sent without a message');
+            $out('record, and no send has an unknown outcome.');
+            break;
+        }
+
+        $target = null;
+
+        foreach ($args as $arg) {
+            if (str_starts_with($arg, '--out=')) {
+                $target = substr($arg, 6);
+            }
+        }
+
+        $target ??= $basePath . '/storage/tmp/unreconciled-sends-' . gmdate('Ymd-His') . '.csv';
+
+        // Created empty and locked down BEFORE any address goes in, so there is
+        // no instant where the file exists and is readable by others.
+        if (@file_put_contents($target, '') === false) {
+            $fail('Could not write ' . $target);
+        }
+
+        @chmod($target, 0600);
+
+        $handle = @fopen($target, 'wb');
+
+        if ($handle === false) {
+            $fail('Could not open ' . $target . ' for writing.');
+        }
+
+        // Excel and Numbers both read a bare UTF-8 CSV as the system encoding
+        // and mangle any non-ASCII campaign name. A BOM is the one thing that
+        // stops that, and it costs nothing anywhere else.
+        fwrite($handle, "\xEF\xBB\xBF");
+        fputcsv($handle, array_keys($rows[0]));
+
+        foreach ($rows as $row) {
+            fputcsv($handle, array_map(
+                static fn (mixed $v): string => $v === null ? '' : (string) $v,
+                $row
+            ));
+        }
+
+        fclose($handle);
+
+        $counts = ['sent_without_a_message' => 0, 'outcome_unknown' => 0];
+
+        foreach ($rows as $row) {
+            $key = (string) $row['finding'];
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+
+        $out('Wrote ' . count($rows) . ' row(s) to:');
+        $out('  ' . $target);
+        $out('');
+        $out(sprintf('  %-26s %d', 'sent_without_a_message', $counts['sent_without_a_message']));
+        $out(sprintf('  %-26s %d', 'outcome_unknown', $counts['outcome_unknown']));
+        $out('');
+
+        if ($counts['sent_without_a_message'] > 0) {
+            $out('sent_without_a_message rows have NO provider message id — the message');
+            $out('row was never written, which is the bug. Match them on address and the');
+            $out('time in sent_at. If your provider does not keep a searchable send log');
+            $out('that far back, that history does not exist and no lookup will find it;');
+            $out('decide by what the campaign was instead. Sending a marketing email to');
+            $out('somebody who already received it raises your complaint rate, which');
+            $out('costs every tenant\'s deliverability, so the safe default there is not');
+            $out('to resend. A service reminder with a deadline is the opposite case.');
+            $out('');
+        }
+
+        if ($counts['outcome_unknown'] > 0) {
+            $out('outcome_unknown rows do have a message row, so email_message_id and');
+            $out('provider_attempted_at narrow the search. Set the recipient to sent if');
+            $out('it was accepted, or to pending to have the next tick send it.');
+            $out('');
+        }
+
+        if (!$masked) {
+            $out('This file contains real email addresses. It is 0600 and outside the web');
+            $out('root. Delete it when you are done, and do not attach it to a ticket.');
+            $out('');
+        }
+
+        $out('Nothing was changed and nothing was resent.');
+        break;
+
     case 'help':
     default:
         $out('Available commands:');
@@ -517,6 +754,8 @@ switch ($command) {
             'db:check'         => 'Verify core tables exist',
             'mail:check'       => 'Verify provider credentials and quota; add an address to check if SES will deliver to it',
             'mail:stats'       => 'Count sent, arrived, bounced and failed email over the last N days (default 30)',
+            'send:doctor'      => 'Read-only report on sends that need reconciliation; --json for machine output',
+            'send:export'      => 'Export the rows needing reconciliation to CSV; --masked or --with-addresses',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',

@@ -349,6 +349,218 @@ final class CampaignSendTest extends TestCase
     }
 
     /**
+     * The limit bounded one tick, not one day.
+     *
+     * budgetFor() was `dailyLimit - messagesCreatedToday`, and the message row
+     * is written by the worker — fifteen minutes of queue after the dispatcher
+     * decides. So every tick read a counter that had barely moved and handed out
+     * the same allowance again. A tenant capped at two a day got two more every
+     * tick, and the workers sent all of them.
+     */
+    public function testTheDailyLimitIsNotHandedOutAgainOnTheNextTick(): void
+    {
+        $context = $this->sendableOrganisation();
+        $this->readyToSendCampaign($context, 5);
+
+        $this->connection->execute(
+            'UPDATE organisations SET daily_send_limit = 2 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+
+        $first = $this->dispatcher()->tick();
+
+        // No draining in between: this is the scheduler running again while the
+        // workers are still behind, which is the normal case under load.
+        $second = $this->dispatcher()->tick();
+
+        $this->assertSame(2, $first['queued'], 'The first tick spends the allowance');
+        $this->assertSame(0, $second['queued'], 'The second tick finds it already spent');
+        $this->assertCount(
+            2,
+            $this->driver()->dispatched(),
+            'Two jobs exist for a limit of two, however many ticks ran'
+        );
+    }
+
+    public function testWorkAlreadyOnTheQueueCountsAgainstTodaysAllowance(): void
+    {
+        $context = $this->sendableOrganisation();
+        $this->readyToSendCampaign($context, 5);
+
+        $this->connection->execute(
+            'UPDATE organisations SET daily_send_limit = 10 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+
+        $this->dispatcher()->tick();
+
+        $organisation = $this->organisation($context['organisation_id']);
+        $used         = $this->budgets()->usedToday($organisation);
+
+        $this->assertSame(0, $used['handed_off'], 'Nothing has reached a provider yet');
+        $this->assertSame(5, $used['committed'], 'But five sends are committed');
+        $this->assertSame(5, $this->budgets()->remainingToday($organisation));
+    }
+
+    public function testDrainingTheQueueDoesNotCountTheSameSendTwice(): void
+    {
+        $context = $this->sendableOrganisation();
+        $this->readyToSendCampaign($context, 3);
+
+        $this->connection->execute(
+            'UPDATE organisations SET daily_send_limit = 10 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+
+        $this->dispatcher()->tick();
+        $this->runQueue();
+
+        $used = $this->budgets()->usedToday($this->organisation($context['organisation_id']));
+
+        $this->assertSame(3, $used['handed_off']);
+        $this->assertSame(0, $used['committed'], 'A sent recipient is no longer a commitment');
+        $this->assertSame(3, $used['total'], 'Three sends cost three, not six');
+    }
+
+    /**
+     * The limit is the tenant's calendar day, so the window has to be their
+     * midnight — not the server's.
+     *
+     * The validator used to compute it from the UTC clock while the dispatcher
+     * used the organisation's timezone. Eight hours apart for this tenant, which
+     * is the difference between a campaign being refused and being sent.
+     */
+    public function testTheOrganisationsOwnMidnightDecidesTheWindow(): void
+    {
+        $context = $this->sendableOrganisation();
+
+        $this->connection->execute(
+            'UPDATE organisations SET timezone = ?, daily_send_limit = 10 WHERE id = ?',
+            ['Asia/Kuala_Lumpur', $context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+
+        // Frozen at 2026-06-15 12:00 UTC, which is 20:00 the same day in +08.
+        // Their day began at 16:00 UTC on the 14th.
+        $this->assertSame(
+            '2026-06-14 16:00:00',
+            $this->budgets()->dayStartUtc($this->organisation($context['organisation_id']))
+        );
+
+        // A send at 17:00 UTC on the 14th is yesterday in UTC and today for them.
+        $this->seedMarketingMessage($context['organisation_id'], '2026-06-14 17:00:00');
+        // One an hour before their day started is not counted.
+        $this->seedMarketingMessage($context['organisation_id'], '2026-06-14 15:00:00');
+
+        $used = $this->budgets()->usedToday($this->organisation($context['organisation_id']));
+
+        $this->assertSame(1, $used['handed_off'], 'Their day, not the server\'s');
+    }
+
+    /**
+     * A hold is temporary. It used to be permanent for everything in flight.
+     *
+     * Suspension and an administrator's sending pause were only checked before
+     * enqueueing. Jobs already queued ran on, hit the per-contact compliance
+     * check — which does test both — and marked their recipient `skipped` for
+     * ever, as if each individual contact had been found ineligible. An hour's
+     * deliverability pause destroyed the outstanding audience: remaining() fell
+     * to zero and the campaign reported itself COMPLETE having written to
+     * nobody.
+     */
+    public function testPausingSendingWhileJobsAreQueuedDefersThemRatherThanBurningThem(): void
+    {
+        $context = $this->sendableOrganisation();
+        $id      = $this->readyToSendCampaign($context, 3);
+
+        $this->dispatcher()->tick();
+
+        $this->connection->execute(
+            'UPDATE organisations SET sending_paused = 1, sending_paused_reason = ? WHERE id = ?',
+            ['Deliverability review', $context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+
+        $this->runQueue();
+
+        foreach ($this->snapshot($id) as $row) {
+            $this->assertSame(
+                'pending',
+                (string) $row['send_status'],
+                'Held work goes back in the pool, it is not closed out'
+            );
+            $this->assertNotNull($row['retry_after'], 'And waits rather than being re-queued immediately');
+        }
+
+        $this->assertSame(3, $this->recipients()->remaining($id), 'All three are still outstanding');
+        $this->assertSame('sending', (string) $this->campaign($id)['status'], 'The campaign is not complete');
+        $this->assertSame(
+            0,
+            (int) $this->connection->scalar('SELECT COUNT(*) FROM email_messages WHERE campaign_id = ?', [$id]),
+            'Nothing was sent while the hold stood'
+        );
+    }
+
+    public function testADeferredSendGoesOutOnceTheHoldIsLifted(): void
+    {
+        $context = $this->sendableOrganisation();
+        $id      = $this->readyToSendCampaign($context, 3);
+
+        $this->dispatcher()->tick();
+
+        $this->connection->execute(
+            'UPDATE organisations SET sending_paused = 1 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+        $this->runQueue();
+
+        // The administrator lifts it, and the deferral elapses.
+        $this->connection->execute(
+            'UPDATE organisations SET sending_paused = 0 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->clock->travel('+16 minutes');
+        $this->bindTenant($context['organisation_id']);
+
+        $this->dispatcher()->tick();
+        $this->runQueue();
+
+        $this->assertSame(
+            3,
+            (int) $this->connection->scalar('SELECT COUNT(*) FROM email_messages WHERE campaign_id = ?', [$id]),
+            'Everybody held back is written to once the hold is gone'
+        );
+        $this->assertSame(0, $this->recipients()->remaining($id));
+    }
+
+    public function testBeingDeferredDoesNotSpendARetryAttempt(): void
+    {
+        $context = $this->sendableOrganisation();
+        $id      = $this->readyToSendCampaign($context, 1);
+
+        $this->dispatcher()->tick();
+
+        $this->connection->execute(
+            'UPDATE organisations SET sending_paused = 1 WHERE id = ?',
+            [$context['organisation_id']]
+        );
+        $this->bindTenant($context['organisation_id']);
+        $this->runQueue();
+
+        $row = $this->snapshot($id)[0];
+
+        $this->assertSame(
+            0,
+            (int) $row['attempt_count'],
+            'The job never claimed the recipient, so nothing was attempted'
+        );
+    }
+
+    /**
      * A suspended tenant, or one an administrator has paused, is held rather than
      * having its whole audience marked ineligible — the block applies to everybody
      * and will be lifted.
@@ -530,6 +742,35 @@ final class CampaignSendTest extends TestCase
         $provider = $this->container->make(EmailProviderInterface::class);
 
         return $provider;
+    }
+
+    private function budgets(): \App\Services\SendBudget
+    {
+        return $this->container->make(\App\Services\SendBudget::class);
+    }
+
+    /** @return array<string,mixed> */
+    private function organisation(int $id): array
+    {
+        return $this->connection->selectOne('SELECT * FROM organisations WHERE id = ?', [$id]) ?? [];
+    }
+
+    /** A marketing message handed to a provider at a given UTC instant. */
+    private function seedMarketingMessage(int $organisationId, string $createdAt): void
+    {
+        $email = 'seeded-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $this->connection->table('email_messages')->insert([
+            'organisation_id'  => $organisationId,
+            'uuid'             => uuid4(),
+            'message_class'    => 'marketing',
+            'email'            => $email,
+            'email_normalized' => $email,
+            'from_email'       => 'hello@perthplumbing.test',
+            'subject'          => 'Seeded',
+            'status'           => 'sent',
+            'created_at'       => $createdAt,
+        ]);
     }
 
     /** @return array<string,mixed> */

@@ -606,5 +606,17 @@ return static function (Router $router): void {
         // A user's own profile needs no permission: it is their own account.
         $router->get('/settings/profile', SettingsController::class . '@profile');
         $router->post('/settings/profile/password', SettingsController::class . '@changePassword');
+
+        /*
+         * Revoking API keys is NOT their own account: the keys belong to the
+         * organisation and an integration everybody depends on stops working.
+         * So it sits on the profile page, where somebody worried about a
+         * compromise will look, behind the permission that owns integrations.
+         * The controller authorises as well — a route is a convenience, not the
+         * boundary.
+         */
+        $router->post('/settings/profile/api-keys/revoke-all', SettingsController::class . '@revokeApiKeys', [
+            RequirePermission::class . ':integrations.manage',
+        ]);
     });
 };

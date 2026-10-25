@@ -92,6 +92,43 @@ final class UserRepository extends Repository
         return $lockedUntil > $this->now();
     }
 
+    /**
+     * Invalidate every session this account has open, and return the new version.
+     *
+     * The increment is done in SQL rather than read-modify-write, so two
+     * concurrent revocations (a reset completing while an admin disables the
+     * account) both move the number forward instead of one overwriting the
+     * other with a value it read before the other wrote.
+     *
+     * Returning the new version is what lets the caller keep the session it is
+     * holding right now — a deliberate password change should not sign the
+     * person doing it out of the tab they are in.
+     */
+    public function revokeSessions(int $id): int
+    {
+        $this->connection->execute(
+            'UPDATE users SET session_version = session_version + 1, sessions_revoked_at = ?, updated_at = ? '
+            . 'WHERE id = ?',
+            [$this->now(), $this->now(), $id]
+        );
+
+        return $this->sessionVersion($id);
+    }
+
+    /**
+     * The version a session for this account must carry to be accepted.
+     *
+     * A missing row reads as 0, which no session can ever have been stamped
+     * with, so a deleted account's cookie fails the comparison rather than
+     * passing it by default.
+     */
+    public function sessionVersion(int $id): int
+    {
+        $value = $this->unscoped()->where('id', '=', $id)->value('session_version');
+
+        return $value === null ? 0 : (int) $value;
+    }
+
     public function emailExists(string $email): bool
     {
         return $this->unscoped()

@@ -181,46 +181,106 @@ final class AuthService
         return $token;
     }
 
+    /**
+     * Redeem a reset token and set the new password.
+     *
+     * The token is burned by a conditional UPDATE, not by a read followed by a
+     * write. Reading the row, deciding it was unused, and only then marking it
+     * means two requests arriving together both read "unused" and both set a
+     * password — the second silently overwriting the first. The predicate makes
+     * the database the arbiter: exactly one UPDATE affects a row and the loser
+     * is told by the return value.
+     *
+     * Expiry is part of that same predicate rather than a separate check, so a
+     * token cannot expire between being examined and being used.
+     *
+     * Every session the account has open is revoked. This is the point of a
+     * password reset and it is what the previous implementation did not do: it
+     * called logout(), which ends the session of the browser doing the reset —
+     * an anonymous visitor who was never signed in. Whoever held a stolen cookie
+     * kept it.
+     */
     public function completePasswordReset(string $token, string $newPassword): bool
     {
+        // Before the token is burned: a password the policy rejects must not
+        // cost somebody their one valid link.
         $this->assertPasswordPolicy($newPassword);
 
-        $record = $this->connection->table('password_resets')
-            ->where('token_hash', '=', hash('sha256', $token))
-            ->whereNull('used_at')
-            ->first();
+        $tokenHash = hash('sha256', $token);
+        $now       = $this->clock->nowString();
+        $userId    = null;
 
-        if ($record === null) {
-            return false;
-        }
+        $redeemed = $this->connection->transaction(function () use ($tokenHash, $now, $newPassword, &$userId): bool {
+            $burned = $this->connection->execute(
+                'UPDATE password_resets SET used_at = ?, updated_at = ? '
+                . 'WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?',
+                [$now, $now, $tokenHash, $now]
+            );
 
-        if ((string) $record['expires_at'] < $this->clock->nowString()) {
-            return false;
-        }
+            if ($burned < 1) {
+                return false;
+            }
 
-        $userId = (int) $record['user_id'];
+            $record = $this->connection->table('password_resets')
+                ->where('token_hash', '=', $tokenHash)
+                ->first();
 
-        $this->connection->transaction(function () use ($record, $userId, $newPassword): void {
+            if ($record === null) {
+                return false;
+            }
+
+            $userId = (int) $record['user_id'];
+
             $this->users->update($userId, [
                 'password_hash'       => $this->hash->make($newPassword),
-                'password_changed_at' => $this->clock->nowString(),
+                'password_changed_at' => $now,
+                // A reset is the documented way out of a lockout, so it clears
+                // one. Leaving the counter set would lock the account out again
+                // on the first attempt with the new password.
                 'failed_login_count'  => 0,
                 'locked_until'        => null,
             ]);
 
+            // Any other link still outstanding for this account is spent too.
+            // Whoever asked for a reset twice does not need two live tokens,
+            // and one of them may be the attacker's.
             $this->connection->table('password_resets')
-                ->where('id', '=', (int) $record['id'])
-                ->update(['used_at' => $this->clock->nowString()]);
+                ->where('user_id', '=', $userId)
+                ->whereNull('used_at')
+                ->update(['used_at' => $now, 'updated_at' => $now]);
+
+            $this->users->revokeSessions($userId);
+
+            return true;
         });
 
-        $this->audit->log('password_reset_completed', 'user', $userId);
+        if ($redeemed !== true || $userId === null) {
+            return false;
+        }
 
-        // Any existing session belonging to this user is no longer trustworthy.
+        // No token, no hash and no password in the audit record — only that it
+        // happened, and to whom.
+        $this->audit->log('password_reset_completed', 'user', $userId, null, [
+            'sessions_revoked' => true,
+        ]);
+
+        // Including this request's own session, if the visitor happened to have
+        // one. The revocation above is what reaches the others.
         $this->auth->logout();
 
         return true;
     }
 
+    /**
+     * Change a password for somebody who is signed in and knows the old one.
+     *
+     * Also revokes every session for the account, for the same reason the reset
+     * does: the usual motive for changing a password voluntarily is suspecting
+     * somebody else has it. The difference is that this caller is present, so
+     * their own session is re-stamped with the new version instead of being
+     * thrown away — signing people out of the tab they just used would teach
+     * them not to change their password.
+     */
     public function changePassword(int $userId, string $currentPassword, string $newPassword): bool
     {
         $user = $this->users->findById($userId);
@@ -231,12 +291,34 @@ final class AuthService
 
         $this->assertPasswordPolicy($newPassword);
 
-        $this->users->update($userId, [
-            'password_hash'       => $this->hash->make($newPassword),
-            'password_changed_at' => $this->clock->nowString(),
-        ]);
+        $version = $this->connection->transaction(function () use ($userId, $newPassword): int {
+            $this->users->update($userId, [
+                'password_hash'       => $this->hash->make($newPassword),
+                'password_changed_at' => $this->clock->nowString(),
+            ]);
 
-        $this->audit->log('password_changed', 'user', $userId);
+            // A pending reset link is a credential for the old password's
+            // owner. Changing the password voluntarily spends it.
+            $this->connection->table('password_resets')
+                ->where('user_id', '=', $userId)
+                ->whereNull('used_at')
+                ->update([
+                    'used_at'    => $this->clock->nowString(),
+                    'updated_at' => $this->clock->nowString(),
+                ]);
+
+            return $this->users->revokeSessions($userId);
+        });
+
+        // Only if the caller is the account holder. An administrator resetting
+        // somebody else's password must not inherit their session.
+        if ($this->auth->id() === $userId) {
+            $this->auth->acceptSessionVersion((int) $version);
+        }
+
+        $this->audit->log('password_changed', 'user', $userId, null, [
+            'sessions_revoked' => true,
+        ]);
 
         return true;
     }

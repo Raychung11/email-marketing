@@ -9,6 +9,32 @@ return [
         'min_length' => 12,
     ],
 
+    /*
+     * Where rate-limit counters live.
+     *
+     * DELIBERATELY NOT THE QUEUE DRIVER. It used to be: anything but Redis got
+     * an in-process array, so every deployment running the database queue —
+     * which on shared hosting is every deployment — had login throttling, API
+     * key limits and public endpoint limits that silently did nothing, because
+     * each HTTP request started with an empty array.
+     *
+     *   auto      Redis when the extension is loaded and configured, database
+     *             otherwise. The right answer for nearly everybody.
+     *   redis     insist on Redis.
+     *   database  insist on the database. Works anywhere the app works.
+     *   array     in-process only. Fine for tests, useless across requests, and
+     *             refused in production unless force_insecure_store is set.
+     */
+    'rate_limit' => [
+        'store' => env('RATE_LIMIT_STORE', 'auto'),
+
+        /*
+         * The escape hatch, and it is named so nobody sets it by accident.
+         * Production with an in-process limiter is production with no limiter.
+         */
+        'force_insecure_store' => (bool) env('RATE_LIMIT_ALLOW_INSECURE', false),
+    ],
+
     'login' => [
         'max_attempts'  => (int) env('LOGIN_MAX_ATTEMPTS', 5),
         'decay_seconds' => (int) env('LOGIN_DECAY_SECONDS', 900),

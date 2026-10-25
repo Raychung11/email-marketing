@@ -9,6 +9,7 @@ use App\Core\Config;
 use App\Database\Connection;
 use App\Mail\EmailRenderer;
 use App\Repositories\SendingDomainRepository;
+use App\Services\SendBudget;
 use App\Support\TenantContext;
 
 /**
@@ -29,6 +30,7 @@ final class CampaignValidator
         private readonly ComplianceService $compliance,
         private readonly EmailRenderer $renderer,
         private readonly SendingDomainRepository $domains,
+        private readonly SendBudget $budgets,
         private readonly Connection $connection,
         private readonly Config $config,
         private readonly Clock $clock,
@@ -175,21 +177,35 @@ final class CampaignValidator
         $eligible   = (int) ($audience['eligible'] ?? 0);
 
         if ($dailyLimit > 0 && $eligible > 0) {
-            $sentToday = (int) $this->connection->scalar(
-                "SELECT COUNT(*) FROM email_messages
-                 WHERE organisation_id = ? AND message_class = 'marketing' AND created_at >= ?",
-                [(int) $organisation['id'], $this->clock->now()->format('Y-m-d 00:00:00')]
-            );
+            /*
+             * Asked of SendBudget rather than counted here.
+             *
+             * This used to run its own COUNT with its own idea of when today
+             * started: `now()->format('Y-m-d 00:00:00')`, which is midnight UTC
+             * because the clock is UTC. The dispatcher used midnight in the
+             * organisation's own timezone. For a tenant in Kuala Lumpur the two
+             * windows were eight hours apart, so the validator could refuse a
+             * campaign the dispatcher would have sent, or pass one it then
+             * stalled on, and the number in this message matched neither.
+             *
+             * It also counted only messages already handed over, so a campaign
+             * could be approved against an allowance that the queue had already
+             * spent.
+             */
+            $used = $this->budgets->usedToday($organisation);
 
-            if (($sentToday + $eligible) > $dailyLimit) {
+            if (($used['total'] + $eligible) > $dailyLimit) {
                 $blocking[] = $this->finding(
                     ReasonCode::ORG_DAILY_LIMIT_REACHED,
                     sprintf(
                         'This campaign would send %s emails, taking today\'s total past your %s daily limit '
-                        . '(%s already sent). Limits increase as your account builds a sending history.',
+                        . '(%s already sent%s). Limits increase as your account builds a sending history.',
                         number_format($eligible),
                         number_format($dailyLimit),
-                        number_format($sentToday)
+                        number_format($used['handed_off']),
+                        $used['committed'] > 0
+                            ? ', ' . number_format($used['committed']) . ' already queued'
+                            : ''
                     )
                 );
             }

@@ -32,6 +32,37 @@
   </div>
 
   <div class="col col--narrow">
+<?php if ($activeApiKeys !== null): ?>
+    <div class="card">
+      <div class="card__head"><h2>API keys</h2></div>
+      <div class="card__body">
+        <?php if ($activeApiKeys === 0): ?>
+          <p class="small">No API keys are active for this organisation.</p>
+        <?php else: ?>
+          <p class="small">
+            <strong><?= (int) $activeApiKeys ?></strong>
+            API key<?= $activeApiKeys === 1 ? '' : 's' ?>
+            can authenticate a request to this account right now.
+          </p>
+          <p class="hint">
+            Changing your password signs you out everywhere, but it does not touch
+            these — they are separate credentials, and revoking them silently would
+            break whatever is using them with no way to tell why. If you think a key
+            has been exposed, revoke them all here and issue replacements.
+          </p>
+          <form method="post"
+                action="/settings/profile/api-keys/revoke-all"
+                onsubmit="return confirm('Revoke all <?= (int) $activeApiKeys ?> API key(s)? Anything using them stops working immediately. This cannot be undone.');">
+            <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
+            <button class="btn btn--danger" type="submit">
+              Revoke all API keys
+            </button>
+          </form>
+        <?php endif; ?>
+      </div>
+    </div>
+<?php endif; ?>
+
     <div class="card">
       <div class="card__head"><h2>Account</h2></div>
       <div class="card__body">

@@ -146,6 +146,23 @@ check(
     'Shared hosting has no Redis. Set QUEUE_DRIVER=database.'
 );
 
+// Checked separately from the queue, because it used to be inherited from it:
+// anything other than Redis meant an in-memory limiter, which on a per-request
+// PHP process limits nothing at all. `array` here is the one value that can
+// silently switch login throttling off in production.
+$rateLimitStore = $env('RATE_LIMIT_STORE', 'auto');
+
+check(
+    'Rate limits survive the request',
+    $rateLimitStore === 'array' ? 'fail' : ($rateLimitStore === 'database' ? 'pass' : 'warn'),
+    $rateLimitStore,
+    $rateLimitStore === 'array'
+        ? 'RATE_LIMIT_STORE=array keeps counters in one request\'s memory, so login '
+            . 'throttling never binds. Set RATE_LIMIT_STORE=database.'
+        : 'Set RATE_LIMIT_STORE=database explicitly on shared hosting; "auto" tries '
+            . 'Redis first and only then falls back.'
+);
+
 // -------------------------------------------------------------- the database
 
 $database  = $env('DB_DATABASE');
