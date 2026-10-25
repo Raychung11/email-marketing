@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Clock;
-use App\Core\Config;
 use App\Database\Connection;
 use App\Jobs\SendCampaignEmail;
 use App\Mail\EmailProviderInterface;
@@ -336,9 +335,7 @@ final class DatabaseQueueSendTest extends TestCase
     {
         return new QueueRunner(
             $this->container,
-            $this->container->make(QueueDriver::class),
-            $this->container->make(QueueManager::class),
-            $this->container->make(Config::class)
+            $this->container->make(QueueDriver::class)
         );
     }
 

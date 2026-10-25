@@ -30,11 +30,9 @@ require __DIR__ . '/../bootstrap/autoload.php';
 use App\Core\Application;
 use App\Core\Config;
 use App\Core\Logger;
-use App\Queue\Job;
-use App\Queue\PermanentFailure;
 use App\Queue\QueueDriver;
 use App\Queue\QueueManager;
-use App\Queue\Queueable;
+use App\Queue\Worker;
 use App\Services\SchedulerLock;
 
 $options = getopt('', ['queue::', 'sleep::', 'max-jobs::', 'memory::', 'once', 'max-seconds::', 'lock::']);
@@ -50,6 +48,8 @@ $logger = $container->make(Logger::class);
 $driver = $container->make(QueueDriver::class);
 /** @var QueueManager $queue */
 $queue = $container->make(QueueManager::class);
+/** @var Worker $worker */
+$worker = $container->make(Worker::class);
 
 $queues = array_values(array_filter(array_map(
     'trim',
@@ -145,62 +145,7 @@ while (!$shouldStop) {
 
     $processed++;
 
-    try {
-        $handler = $container->make($job->jobClass);
-
-        if (!$handler instanceof Queueable) {
-            throw new PermanentFailure($job->jobClass . ' is not a queueable job.');
-        }
-
-        $handler->handle($job->payload);
-        $driver->acknowledge($job);
-    } catch (PermanentFailure $e) {
-        // No retry: the outcome will not change, and retrying a rejected address
-        // burns sending reputation for nothing.
-        $logger->warning('Job permanently failed', [
-            'job'   => $job->jobClass,
-            'queue' => $job->queue,
-            'error' => $e->getMessage(),
-        ]);
-
-        $driver->fail($job, $e->getMessage(), true);
-    } catch (Throwable $e) {
-        $attempt = $job->attemptCount + 1;
-        $backoff = $queue->backoffFor($attempt - 1);
-
-        if ($backoff === null || $attempt >= $queue->maxAttempts()) {
-            $logger->error('Job exhausted its retries', [
-                'job'      => $job->jobClass,
-                'queue'    => $job->queue,
-                'attempts' => $attempt,
-                'error'    => $e->getMessage(),
-            ]);
-
-            $driver->fail($job, $e->getMessage(), false);
-        } else {
-            $logger->info('Job failed; retrying with backoff', [
-                'job'     => $job->jobClass,
-                'attempt' => $attempt,
-                'retry_in' => $backoff,
-                'error'   => $e->getMessage(),
-            ]);
-
-            // Retries go to the dedicated retry queue so a hot-looping failure
-            // cannot starve first-attempt work.
-            $retry = new Job(
-                (string) $config->get('queue.retry_queue', 'email_retry'),
-                $job->jobClass,
-                $job->payload,
-                $job->organisationId,
-                $attempt,
-                null,
-                $job->priority
-            );
-
-            $driver->release($retry, $backoff);
-            $driver->acknowledge($job);
-        }
-    }
+    $worker->process($job);
 
     if ($runOnce) {
         break;

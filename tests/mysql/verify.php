@@ -221,10 +221,16 @@ if ($userId > 0) {
 
 echo implode(PHP_EOL, $results) . PHP_EOL;
 
-$failed = count(array_filter($results, static fn (string $r): bool => str_starts_with($r, '  FAIL')));
+$failed  = count(array_filter($results, static fn (string $r): bool => str_starts_with($r, '  FAIL')));
+// Counted apart from the passes. "12 checks passed" when two of them never ran
+// is the kind of small overstatement that turns into real confidence in
+// something nobody actually verified.
+$skipped = count(array_filter($results, static fn (string $r): bool => str_starts_with($r, '  SKIP')));
+$passed  = count($results) - $failed - $skipped;
 
 echo PHP_EOL . ($failed === 0
-    ? 'OK — ' . count($results) . ' checks passed on ' . $connection->driver()
+    ? 'OK — ' . $passed . ' checks passed on ' . $connection->driver()
+        . ($skipped > 0 ? ', ' . $skipped . ' skipped (seed the database to cover them)' : '')
     : $failed . ' OF ' . count($results) . ' CHECKS FAILED') . PHP_EOL;
 
 exit($failed === 0 ? 0 : 1);

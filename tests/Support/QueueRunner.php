@@ -4,45 +4,37 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
-use App\Core\Config;
 use App\Core\Container;
 use App\Queue\Job;
-use App\Queue\PermanentFailure;
 use App\Queue\QueueDriver;
-use App\Queue\QueueManager;
-use App\Queue\Queueable;
-use Throwable;
+use App\Queue\Worker;
 
 /**
- * The worker's job-handling loop, for tests that need a real queue.
+ * A worker, for tests that need a real queue.
  *
- * MIRRORS workers/worker.php. Deliberately a copy rather than an extraction:
- * pulling the loop out of the worker is a refactor of production code to suit a
- * test, and this brief is not allowed to make that change. The copy covers the
- * decisions that matter here and nothing else — no signals, no shift deadline,
- * no memory ceiling, no heartbeat.
+ * This used to be a copy of the loop in workers/worker.php, with a note saying
+ * the two had to be kept in step by hand. They do not any more: the loop lives
+ * in App\Queue\Worker and both the script and this call into it. A test that
+ * passes here is a test that passed against the code production runs, which is
+ * the only version of that claim worth making — the bug this suite exists to
+ * catch was precisely the worker acknowledging a job that had not done its work.
  *
- * What it does have to match exactly is the error handling, because that is the
- * part the reliability work depends on:
- *
- *   PermanentFailure  -> dead-letter, no retry
- *   anything else     -> retry onto the retry queue with the backoff, until the
- *                        attempt ceiling, then dead-letter
- *   success           -> acknowledge
- *
- * If workers/worker.php changes those, this has to change with it.
+ * What is left here is the part a test wants and a long-running process does
+ * not: a record of what happened to each job, so an assertion can say "that was
+ * retried, not dead-lettered" instead of inferring it from side effects.
  */
 final class QueueRunner
 {
-    /** @var array<int,array{job:string,outcome:string,error:string|null}> */
+    /** @var array<int,array{job:string,outcome:string}> */
     private array $log = [];
 
+    private readonly Worker $worker;
+
     public function __construct(
-        private readonly Container $container,
+        Container $container,
         private readonly QueueDriver $driver,
-        private readonly QueueManager $queue,
-        private readonly Config $config,
     ) {
+        $this->worker = $container->make(Worker::class);
     }
 
     /**
@@ -59,79 +51,36 @@ final class QueueRunner
         $processed = 0;
 
         while ($processed < $maxJobs) {
-            $job = null;
-
-            foreach ($queues as $queueName) {
-                $job = $this->driver->pop($queueName, 'test-worker');
-
-                if ($job !== null) {
-                    break;
-                }
-            }
+            $job = $this->next($queues);
 
             if ($job === null) {
                 return $processed;
             }
 
+            $this->log[] = ['job' => $job->jobClass, 'outcome' => $this->worker->process($job)];
             $processed++;
-            $this->run($job);
         }
 
         return $processed;
     }
 
-    /** @return array<int,array{job:string,outcome:string,error:string|null}> */
+    /** @return array<int,array{job:string,outcome:string}> */
     public function log(): array
     {
         return $this->log;
     }
 
-    private function run(Job $job): void
+    /** @param array<int,string> $queues */
+    private function next(array $queues): ?Job
     {
-        try {
-            $handler = $this->container->make($job->jobClass);
+        foreach ($queues as $queueName) {
+            $job = $this->driver->pop($queueName, 'test-worker');
 
-            if (!$handler instanceof Queueable) {
-                throw new PermanentFailure($job->jobClass . ' is not a queueable job.');
+            if ($job !== null) {
+                return $job;
             }
-
-            $handler->handle($job->payload);
-            $this->driver->acknowledge($job);
-            $this->record($job, 'acknowledged', null);
-        } catch (PermanentFailure $e) {
-            $this->driver->fail($job, $e->getMessage(), true);
-            $this->record($job, 'dead_lettered', $e->getMessage());
-        } catch (Throwable $e) {
-            $attempt = $job->attemptCount + 1;
-            $backoff = $this->queue->backoffFor($attempt - 1);
-
-            if ($backoff === null || $attempt >= $this->queue->maxAttempts()) {
-                $this->driver->fail($job, $e->getMessage(), false);
-                $this->record($job, 'exhausted', $e->getMessage());
-
-                return;
-            }
-
-            $this->driver->release(
-                new Job(
-                    (string) $this->config->get('queue.retry_queue', 'email_retry'),
-                    $job->jobClass,
-                    $job->payload,
-                    $job->organisationId,
-                    $attempt,
-                    null,
-                    $job->priority
-                ),
-                $backoff
-            );
-
-            $this->driver->acknowledge($job);
-            $this->record($job, 'retried', $e->getMessage());
         }
-    }
 
-    private function record(Job $job, string $outcome, ?string $error): void
-    {
-        $this->log[] = ['job' => $job->jobClass, 'outcome' => $outcome, 'error' => $error];
+        return null;
     }
 }
