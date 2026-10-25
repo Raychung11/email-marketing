@@ -57,6 +57,7 @@ final class ReasonCode
     public const NO_BUSINESS_IDENTITY    = 'NO_BUSINESS_IDENTITY';
     public const NO_AUDIENCE             = 'NO_AUDIENCE';
     public const NO_ELIGIBLE_RECIPIENTS  = 'NO_ELIGIBLE_RECIPIENTS';
+    public const CAMPAIGN_CANCELLED      = 'CAMPAIGN_CANCELLED';
     public const DECEPTIVE_SUBJECT       = 'DECEPTIVE_SUBJECT';
     public const MARKETING_AS_TRANSACTIONAL = 'MARKETING_AS_TRANSACTIONAL';
 
@@ -163,6 +164,7 @@ final class ReasonCode
             self::NO_BUSINESS_IDENTITY    => 'Your business name and contact details are missing.',
             self::NO_AUDIENCE             => 'You have not chosen who this campaign goes to.',
             self::NO_ELIGIBLE_RECIPIENTS  => 'Nobody in this audience can be emailed right now.',
+            self::CAMPAIGN_CANCELLED      => 'The campaign was cancelled before this one went out.',
             self::DECEPTIVE_SUBJECT       => 'This subject line may mislead people about what is inside the email.',
             self::MARKETING_AS_TRANSACTIONAL
                 => 'Promotional content cannot be sent as a receipt or a notification.',

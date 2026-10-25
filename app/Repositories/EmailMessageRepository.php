@@ -10,8 +10,13 @@ namespace App\Repositories;
  * Stores addressing and status, never the rendered body: this table would
  * otherwise become a permanent copy of every marketing email ever sent to every
  * customer, which is a liability with no operational value.
+ *
+ * Not final, unlike its neighbours: the send path has to behave correctly when
+ * a write to this table fails after the provider has already accepted the
+ * message, and the only honest way to test that is to substitute a repository
+ * that fails on command.
  */
-final class EmailMessageRepository extends Repository
+class EmailMessageRepository extends Repository
 {
     protected function table(): string
     {

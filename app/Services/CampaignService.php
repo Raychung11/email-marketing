@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Compliance\CampaignValidator;
+use App\Compliance\ReasonCode;
 use App\Core\Clock;
 use App\Core\Config;
 use App\Core\HttpException;
@@ -551,6 +552,10 @@ final class CampaignService
 
         $this->campaigns->transition($id, ['sending', 'scheduled'], 'paused', ['pause_reason' => $reason]);
 
+        // Worth being plain about what pause can and cannot do. Jobs still on
+        // the queue stop before the provider call and hand their recipients
+        // back, so nothing further goes out. Messages already accepted by the
+        // provider are gone and no button here recalls them.
         $this->audit->log('campaign_paused', 'campaign', $id, null, ['reason' => $reason]);
     }
 
@@ -579,7 +584,15 @@ final class CampaignService
             'scheduled_at' => $hasSnapshot ? $campaign['scheduled_at'] : $this->clock->nowString(),
         ]);
 
-        $this->audit->log('campaign_resumed', 'campaign', $id);
+        // Everything still owed goes back in the pool. A recipient can be left
+        // at `queued` with nothing behind it — its job was dead-lettered, or
+        // acknowledged while the campaign was stopped — and the dispatcher only
+        // looks at `pending`, so without this those people are owed an email
+        // that nothing will ever send. Where the job does still exist, the
+        // duplicate loses the claim and sends nothing.
+        $requeued = $this->recipients->requeueOutstanding($id);
+
+        $this->audit->log('campaign_resumed', 'campaign', $id, null, ['requeued' => $requeued]);
     }
 
     public function cancel(int $id, string $reason = 'Cancelled by a user'): void
@@ -599,7 +612,17 @@ final class CampaignService
             ['pause_reason' => $reason]
         );
 
-        $this->audit->log('campaign_cancelled', 'campaign', $id, null, ['reason' => $reason]);
+        // Cancel is not pause. Everything still waiting is closed out here and
+        // now, so that a job still sitting on the queue cannot send it later and
+        // so that resuming is not even a question. Recipients already handed to
+        // the provider keep their status: those emails have been sent, and
+        // rewriting the row would only make the record wrong.
+        $closed = $this->recipients->cancelOutstanding($id, ReasonCode::CAMPAIGN_CANCELLED);
+
+        $this->audit->log('campaign_cancelled', 'campaign', $id, null, [
+            'reason'  => $reason,
+            'stopped' => $closed,
+        ]);
     }
 
     public function duplicate(int $id): int

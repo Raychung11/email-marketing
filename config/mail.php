@@ -38,6 +38,20 @@ return [
         // workers drain as fast as they can, so bounding the queue is what
         // actually keeps the provider's rate limit intact.
         'dispatch_window_seconds' => 60,
+
+        /*
+         * Worker-side pacing.
+         *
+         * Bounding how much one tick enqueues is not a send rate — the workers
+         * drain the queue as fast as they can once it is there. This is the
+         * actual rate limit: each worker waits between sends so that, with
+         * `worker_concurrency` of them running, the account stays under
+         * `default_per_second`. Set the concurrency to the number of workers
+         * you really run; setting it to 1 while running four means sending four
+         * times faster than the provider allows.
+         */
+        'pace_workers'       => (bool) env('MAIL_PACE_WORKERS', true),
+        'worker_concurrency' => (int) env('MAIL_WORKER_CONCURRENCY', 1),
     ],
 
     'tracking' => [

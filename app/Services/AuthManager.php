@@ -21,6 +21,7 @@ final class AuthManager
 {
     private const SESSION_USER_ID = 'auth_user_id';
     private const SESSION_ORG_ID  = 'auth_organisation_id';
+    private const SESSION_VERSION = 'auth_version';
 
     /** @var array<string,mixed>|null */
     private ?array $user = null;
@@ -48,10 +49,29 @@ final class AuthManager
         $this->session->regenerate();
         $this->session->put(self::SESSION_USER_ID, $userId);
 
+        // The session records which generation of this account's credentials it
+        // was issued under. A password change bumps the account's number, and
+        // every session still carrying the old one stops working on its next
+        // request — including the ones on machines this process has never seen.
+        $this->session->put(self::SESSION_VERSION, $this->currentVersion($userId));
+
         if ($organisationId !== null) {
             $this->session->put(self::SESSION_ORG_ID, $organisationId);
         }
 
+        $this->reset();
+    }
+
+    /**
+     * Keep this session valid across a password change made from inside it.
+     *
+     * Somebody changing their own password should not be thrown out of the page
+     * they are standing on; every other session still goes.
+     */
+    public function adoptAuthVersion(int $version): void
+    {
+        $this->session->regenerate();
+        $this->session->put(self::SESSION_VERSION, $version);
         $this->reset();
     }
 
@@ -90,6 +110,28 @@ final class AuthManager
         $user = $this->users->findById($id);
 
         if ($user === null || (string) $user['status'] === 'disabled') {
+            return null;
+        }
+
+        /*
+         * The session is only as current as the password it was issued against.
+         *
+         * A session created before the most recent password change is treated as
+         * signed out, whatever device it is on. This is the check that makes
+         * "reset my password" mean "and get everyone else off my account",
+         * which is what a person resetting a password after a compromise
+         * believes they are doing.
+         *
+         * Sessions created before this column existed carry no version; they are
+         * accepted once and re-stamped, so an upgrade does not sign the whole
+         * customer base out at the moment of deploy.
+         */
+        $current = (int) ($user['auth_version'] ?? 1);
+        $held    = $this->session->get(self::SESSION_VERSION);
+
+        if ($held === null) {
+            $this->session->put(self::SESSION_VERSION, $current);
+        } elseif ((int) $held !== $current) {
             return null;
         }
 
@@ -236,6 +278,13 @@ final class AuthManager
                 'You do not have permission to do this (' . $permission . ' is required).'
             );
         }
+    }
+
+    private function currentVersion(int $userId): int
+    {
+        $user = $this->users->findById($userId);
+
+        return (int) ($user['auth_version'] ?? 1);
     }
 
     private function reset(): void

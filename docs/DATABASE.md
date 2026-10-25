@@ -153,10 +153,34 @@ reported audience matches what actually went out.
 `ComplianceService`, which is why a campaign report can say *why* 112 people were
 skipped rather than just that they were.
 
-`send_status` moves `pending → queued → sent`, and the `queued → sent` step is a
-conditional UPDATE (`claimForSending()`). That single statement is what makes the
-send job idempotent: a redelivered queue message claims nothing and sends
+`send_status` moves `pending → queued → sending → sent`. The `sending` step is a
+conditional UPDATE (`claim()`) that also stamps an ownership token; only the
+holder of that token may advance the row afterwards. A redelivered queue
+message, a second worker, or a duplicate dispatch all lose that statement and do
 nothing.
+
+`sending` has to exist as a state of its own. Without it the claim had nowhere
+to go but `sent`, so a recipient was marked as emailed before the provider had
+been asked — and every failure after that point left a customer who had been
+told nothing and a campaign reporting that they had been written to.
+
+There is a seventh state, `outcome_unknown`, for the case nothing else can
+express: a request went to the provider and the answer never came back. Those
+rows are never retried automatically. Resending risks a duplicate to a real
+customer and marking them failed under-reports mail that may well have arrived,
+so they wait for a person — `php cron/console.php send:doctor` lists them with
+the steps to settle each one.
+
+`claim_token`, `claimed_at` and `claim_expires_at` carry the lease.
+`provider_attempted_at` is stamped immediately before the provider call and is
+the one fact that decides what happens to an abandoned claim: null means nothing
+was sent and the row goes back in the pool, set means the outcome is unknown and
+it is parked.
+
+`available_at` carries retry backoff, so the scheduler cannot enqueue a
+recipient ahead of the delay the worker just applied. `budget_day` records which
+day's allowance the send already holds, so a retry spends it once rather than
+once per attempt.
 
 Completeness lives on the campaign, not here: `campaigns.snapshot_completed_at`
 is stamped only when the whole audience has been written. A build interrupted

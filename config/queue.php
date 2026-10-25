@@ -35,6 +35,18 @@ return [
     'retry_backoff' => [60, 300, 1800, 7200],
     'max_attempts'  => 4,
 
+    /*
+     * How long a worker may hold a claimed recipient before another process is
+     * allowed to decide what happened to it.
+     *
+     * It has to outlast the slowest realistic provider call by a wide margin.
+     * Expiring early does not cause a duplicate send — the sweep that reclaims a
+     * lease will not retry a recipient whose provider request was already in
+     * flight — but it does park rows for a human to reconcile that nobody needed
+     * to look at, so erring long is the cheap direction.
+     */
+    'claim_lease_seconds' => (int) env('QUEUE_CLAIM_LEASE_SECONDS', 300),
+
     'worker' => [
         'sleep'           => 1,
         'max_jobs'        => 500,

@@ -30,11 +30,9 @@ require __DIR__ . '/../bootstrap/autoload.php';
 use App\Core\Application;
 use App\Core\Config;
 use App\Core\Logger;
-use App\Queue\Job;
-use App\Queue\PermanentFailure;
 use App\Queue\QueueDriver;
 use App\Queue\QueueManager;
-use App\Queue\Queueable;
+use App\Queue\Worker;
 use App\Services\SchedulerLock;
 
 $options = getopt('', ['queue::', 'sleep::', 'max-jobs::', 'memory::', 'once', 'max-seconds::', 'lock::']);
@@ -50,6 +48,8 @@ $logger = $container->make(Logger::class);
 $driver = $container->make(QueueDriver::class);
 /** @var QueueManager $queue */
 $queue = $container->make(QueueManager::class);
+/** @var Worker $worker */
+$worker = $container->make(Worker::class);
 
 $queues = array_values(array_filter(array_map(
     'trim',
@@ -63,6 +63,22 @@ $runOnce    = isset($options['once']);
 $maxSeconds = max(0, (int) ($options['max-seconds'] ?? 0));
 $lockName   = trim((string) ($options['lock'] ?? ''));
 $workerId   = gethostname() . ':' . getmypid();
+
+/*
+ * How long to wait after each job so the account stays inside the provider's
+ * per-second rate.
+ *
+ * The scheduler's budget bounds how much goes ONTO the queue in a minute, which
+ * is a different thing: once the jobs are there the workers drain them flat out
+ * and sail past an SES rate limit in a couple of seconds. Throttling errors from
+ * that look like bounces and cost sending reputation, so the pacing belongs
+ * here, next to the thing that actually sends.
+ */
+$perSecond  = max(1, (int) $config->get('mail.throttle.default_per_second', 14));
+$concurrency = max(1, (int) $config->get('mail.throttle.worker_concurrency', 1));
+$paceMicros = (bool) $config->get('mail.throttle.pace_workers', true)
+    ? (int) round(1_000_000 / $perSecond * $concurrency)
+    : 0;
 $deadline   = $maxSeconds > 0 ? microtime(true) + $maxSeconds : null;
 
 /** @var SchedulerLock|null $locks */
@@ -145,65 +161,14 @@ while (!$shouldStop) {
 
     $processed++;
 
-    try {
-        $handler = $container->make($job->jobClass);
-
-        if (!$handler instanceof Queueable) {
-            throw new PermanentFailure($job->jobClass . ' is not a queueable job.');
-        }
-
-        $handler->handle($job->payload);
-        $driver->acknowledge($job);
-    } catch (PermanentFailure $e) {
-        // No retry: the outcome will not change, and retrying a rejected address
-        // burns sending reputation for nothing.
-        $logger->warning('Job permanently failed', [
-            'job'   => $job->jobClass,
-            'queue' => $job->queue,
-            'error' => $e->getMessage(),
-        ]);
-
-        $driver->fail($job, $e->getMessage(), true);
-    } catch (Throwable $e) {
-        $attempt = $job->attemptCount + 1;
-        $backoff = $queue->backoffFor($attempt - 1);
-
-        if ($backoff === null || $attempt >= $queue->maxAttempts()) {
-            $logger->error('Job exhausted its retries', [
-                'job'      => $job->jobClass,
-                'queue'    => $job->queue,
-                'attempts' => $attempt,
-                'error'    => $e->getMessage(),
-            ]);
-
-            $driver->fail($job, $e->getMessage(), false);
-        } else {
-            $logger->info('Job failed; retrying with backoff', [
-                'job'     => $job->jobClass,
-                'attempt' => $attempt,
-                'retry_in' => $backoff,
-                'error'   => $e->getMessage(),
-            ]);
-
-            // Retries go to the dedicated retry queue so a hot-looping failure
-            // cannot starve first-attempt work.
-            $retry = new Job(
-                'email_retry',
-                $job->jobClass,
-                $job->payload,
-                $job->organisationId,
-                $attempt,
-                null,
-                $job->priority
-            );
-
-            $driver->release($retry, $backoff);
-            $driver->acknowledge($job);
-        }
-    }
+    $worker->process($job);
 
     if ($runOnce) {
         break;
+    }
+
+    if ($paceMicros > 0) {
+        usleep($paceMicros);
     }
 
     if ($deadline !== null && microtime(true) >= $deadline) {

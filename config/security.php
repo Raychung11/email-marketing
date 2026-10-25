@@ -9,6 +9,26 @@ return [
         'min_length' => 12,
     ],
 
+    /*
+     * Where rate-limit counters live.
+     *
+     * Deliberately its own setting rather than something inferred from the
+     * queue driver. They are unrelated choices: a deployment can perfectly well
+     * run the database queue on shared hosting and still need throttling that
+     * outlives a request, and reading one from the other is how a production
+     * site ended up with login throttling that reset on every page load.
+     *
+     *   auto     redis when it answers, otherwise the database table
+     *   redis    require redis
+     *   database require the rate_limits table
+     *   array    in-process only; tests, never production
+     */
+    'rate_limit' => [
+        'store' => env('RATE_LIMIT_STORE', 'auto'),
+        // Lapsed buckets older than this are swept up by the scheduler.
+        'prune_after_hours' => (int) env('RATE_LIMIT_PRUNE_AFTER_HOURS', 24),
+    ],
+
     'login' => [
         'max_attempts'  => (int) env('LOGIN_MAX_ATTEMPTS', 5),
         'decay_seconds' => (int) env('LOGIN_DECAY_SECONDS', 900),

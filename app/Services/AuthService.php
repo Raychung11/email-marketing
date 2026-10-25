@@ -181,46 +181,84 @@ final class AuthService
         return $token;
     }
 
+    /**
+     * Redeem a password reset token.
+     *
+     * TWO THINGS HAVE TO BE ATOMIC HERE, and neither used to be.
+     *
+     * The token is claimed with a conditional UPDATE rather than read, checked
+     * and then marked. Two requests arriving together both passed the old
+     * `used_at IS NULL` read and both went on to set a password — so a token
+     * that leaked could be redeemed twice, by two different people, and the
+     * second one won. Letting the database decide the winner means exactly one
+     * caller ever sees a row count of 1.
+     *
+     * And the user's auth_version is bumped, which is what actually signs
+     * everybody else out. The old code called logout(), which ends the session
+     * of whoever is holding this request — somebody who is not signed in, since
+     * they are resetting a forgotten password. An attacker with a live session
+     * on another machine was entirely unaffected by the victim recovering their
+     * account, which is the one thing a password reset is for.
+     */
     public function completePasswordReset(string $token, string $newPassword): bool
     {
         $this->assertPasswordPolicy($newPassword);
 
+        $now = $this->clock->nowString();
+
+        // Claim first. Whoever gets the row count is the only caller that may
+        // proceed; everyone else is told the token is spent, which it is.
+        $claimed = $this->connection->execute(
+            'UPDATE password_resets SET used_at = ?
+             WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?',
+            [$now, hash('sha256', $token), $now]
+        );
+
+        if ($claimed === 0) {
+            return false;
+        }
+
         $record = $this->connection->table('password_resets')
             ->where('token_hash', '=', hash('sha256', $token))
-            ->whereNull('used_at')
             ->first();
 
         if ($record === null) {
             return false;
         }
 
-        if ((string) $record['expires_at'] < $this->clock->nowString()) {
-            return false;
-        }
-
         $userId = (int) $record['user_id'];
 
-        $this->connection->transaction(function () use ($record, $userId, $newPassword): void {
-            $this->users->update($userId, [
-                'password_hash'       => $this->hash->make($newPassword),
-                'password_changed_at' => $this->clock->nowString(),
-                'failed_login_count'  => 0,
-                'locked_until'        => null,
-            ]);
+        $this->users->update($userId, [
+            'password_hash'       => $this->hash->make($newPassword),
+            'password_changed_at' => $now,
+            'failed_login_count'  => 0,
+            'locked_until'        => null,
+        ]);
 
-            $this->connection->table('password_resets')
-                ->where('id', '=', (int) $record['id'])
-                ->update(['used_at' => $this->clock->nowString()]);
-        });
+        $this->revokeSessions($userId);
 
-        $this->audit->log('password_reset_completed', 'user', $userId);
+        // The token itself is never written to the audit log: it is a bearer
+        // credential, and the log is read by more people than the mailbox was.
+        $this->audit->log('password_reset_completed', 'user', $userId, null, [
+            'sessions_revoked' => true,
+        ]);
 
-        // Any existing session belonging to this user is no longer trustworthy.
+        // Whoever is holding this request is signed out too, so they arrive at
+        // the login form and prove they know the new password. This matches the
+        // behaviour the reset screen already describes.
         $this->auth->logout();
 
         return true;
     }
 
+    /**
+     * Change a password from inside the account.
+     *
+     * Same revocation as a reset. Somebody changing their password because they
+     * think they have been compromised gets the same guarantee whichever screen
+     * they used to do it — and the current session is re-stamped rather than
+     * ended, so they are not thrown out of the page they are standing on.
+     */
     public function changePassword(int $userId, string $currentPassword, string $newPassword): bool
     {
         $user = $this->users->findById($userId);
@@ -236,9 +274,36 @@ final class AuthService
             'password_changed_at' => $this->clock->nowString(),
         ]);
 
-        $this->audit->log('password_changed', 'user', $userId);
+        $version = $this->revokeSessions($userId);
+
+        if ($this->auth->id() === $userId) {
+            $this->auth->adoptAuthVersion($version);
+        }
+
+        $this->audit->log('password_changed', 'user', $userId, null, ['sessions_revoked' => true]);
 
         return true;
+    }
+
+    /**
+     * Invalidate every session this user has anywhere.
+     *
+     * A counter on the user rather than a sweep of a session store, because the
+     * sessions live in files or in the client's cookie and there is no list of
+     * them to walk. Every request already loads the user; comparing one integer
+     * while it is there costs nothing and reaches devices this process has never
+     * heard of.
+     *
+     * @return int the new version
+     */
+    private function revokeSessions(int $userId): int
+    {
+        $this->connection->execute(
+            'UPDATE users SET auth_version = auth_version + 1 WHERE id = ?',
+            [$userId]
+        );
+
+        return (int) $this->connection->scalar('SELECT auth_version FROM users WHERE id = ?', [$userId]);
     }
 
     private function assertPasswordPolicy(string $password): void

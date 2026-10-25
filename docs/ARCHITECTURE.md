@@ -211,18 +211,43 @@ the worker immediately before `provider->send()`. Hours can pass between them,
 and in that time a contact can unsubscribe, bounce or complain. The preview never
 authorises a send.
 
-**A job that runs twice sends once.** `claimForSending()` is a conditional
-UPDATE from `pending|queued` to `sent`; a redelivered message claims nothing.
-That guarantee is what lets the dispatcher enqueue *before* marking the row
-queued — a duplicate job that sends nothing is a far better failure than a
-recipient silently lost between the two writes.
+**A job that runs twice sends once.** `claim()` is a conditional UPDATE from
+`pending|queued` to `sending` that stamps an ownership token; a redelivered
+message claims nothing. That guarantee is what lets the dispatcher enqueue
+*before* marking the row queued — a duplicate job that sends nothing is a far
+better failure than a recipient silently lost between the two writes.
 
-Throttling takes the lower of two ceilings per scheduler tick: the tenant's
-`daily_send_limit` (a calendar day in *their* timezone, because that is what
-their plan says) and the provider's live quota read from `getQuota()` — not a
-configured guess, because exceeding an SES rate limit produces throttling errors
-that look like bounces and damage every tenant's reputation, not just the one
-that caused them.
+**Claiming is not sending.** The row only reaches `sent` once the provider has
+accepted the message, and `sent` means exactly that: accepted for delivery, not
+delivered. Delivery confirmation arrives later, from the provider's own
+notifications, and lands on `email_messages`.
+
+**Exactly-once is not on offer, and the code does not pretend otherwise.**
+Sending an email is a call to somebody else's system; no amount of local state
+or database transaction makes that atomic with our own writes. What the pipeline
+does instead is record, before the call, whether a request is about to go out —
+so that when a worker dies there is a defensible answer to "did this customer
+get the email". Where there is no defensible answer, the recipient is parked as
+`outcome_unknown` for a person to reconcile rather than guessed at in either
+direction.
+
+Throttling has three parts, and they are not interchangeable.
+
+The tenant's `daily_send_limit` is a *reservation*, taken when work is enqueued
+and tracked in `send_reservations` against a calendar day in their own timezone.
+Counting messages that already exist — which is what this used to do — answers
+"how much have we sent" when the scheduler needs "how much have we already
+committed to sending", so two ticks could hand out the same allowance while the
+workers were still catching up.
+
+The provider's live quota bounds how much one tick puts *on the queue*. That is
+not a send rate: the workers drain the queue as fast as they can once the jobs
+are there.
+
+The send rate itself is paced in the worker, between jobs, from
+`mail.throttle.default_per_second` and `worker_concurrency`. Exceeding an SES
+rate limit produces throttling errors that look like bounces and damage every
+tenant's reputation, not just the one that caused them.
 
 Queues: `email_high_priority`, `email_transactional`, `email_marketing`,
 `email_retry`. Retry backoff 1m → 5m → 30m → 2h, then dead-letter. Permanent

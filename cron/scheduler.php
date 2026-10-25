@@ -342,6 +342,32 @@ if ((int) $clock->now()->format('i') === 0) {
             [$clock->now()->modify('-7 days')->format('Y-m-d H:i:s')]
         );
     });
+
+    /*
+     * Lapsed rate-limit buckets.
+     *
+     * One row per distinct address, API key and IP ever throttled. Left alone it
+     * only grows, and on shared hosting the first anyone hears about it is the
+     * account's disk quota.
+     */
+    $schedule('security.prune_rate_limits', 3600, static function () use ($container, $logger): void {
+        $store = $container->make(App\Core\RateLimitStore::class);
+
+        if (!$store instanceof App\Core\DatabaseRateLimitStore) {
+            return;   // Redis expires its own keys.
+        }
+
+        $removed = $store->prune();
+
+        if ($removed > 0) {
+            $logger->info('Pruned lapsed rate-limit buckets', ['removed' => $removed]);
+        }
+    });
+
+    // Daily send counters nobody will ask about again.
+    $schedule('send.prune_reservations', 3600, static function () use ($container): void {
+        $container->make(App\Services\SendBudget::class)->prune(30);
+    });
 }
 
 $durationMs = (int) round((microtime(true) - $startedAt) * 1000);

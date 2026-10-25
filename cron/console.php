@@ -227,10 +227,20 @@ switch ($command) {
             'locked_until'        => null,
         ]);
 
+        // Same revocation as the in-app reset. This command exists for the
+        // "I think somebody is in my account" morning, and handing out a new
+        // password while leaving the intruder's session working would be the
+        // worst possible time to get this wrong.
+        $container->make(Connection::class)->execute(
+            'UPDATE users SET auth_version = auth_version + 1 WHERE id = ?',
+            [(int) $user['id']]
+        );
+
         $wasLocked = ($user['locked_until'] ?? null) !== null
             || ((int) ($user['failed_login_count'] ?? 0)) > 0;
 
         $out('Password changed for ' . $email);
+        $out('Everyone signed in as this user on any device has been signed out.');
 
         if ($wasLocked) {
             $out('Account unlocked (it had ' . (int) ($user['failed_login_count'] ?? 0) . ' failed attempts).');
@@ -505,6 +515,68 @@ switch ($command) {
         $out('webhook is wired up. Per-message detail is on the Sent email screen.');
         break;
 
+    case 'send:doctor':
+        // Read-only, on purpose. Everything it reports is a case where the right
+        // repair depends on something only a person can check — usually the
+        // provider's own send log — and the way a tool guesses at that is by
+        // mailing somebody the same thing twice.
+        $numeric = array_values(array_filter($args, static fn (string $a): bool => ctype_digit($a)));
+        $sample  = max(1, (int) ($numeric[0] ?? 10));
+        $unmask  = in_array('--show-emails', $argv, true);
+        $doctor  = $container->make(App\Services\SendDoctor::class);
+        $report  = $doctor->report($sample, $unmask);
+
+        if ($report === []) {
+            $out('Nothing to reconcile. Every recipient is accounted for.');
+            break;
+        }
+
+        $out('Found ' . count($report) . ' thing' . (count($report) === 1 ? '' : 's') . ' worth a look.');
+
+        if (!$unmask) {
+            $out('Addresses are masked. Add --show-emails if you need them in full.');
+        }
+
+        foreach ($report as $finding) {
+            $out('');
+            $out(str_repeat('-', 72));
+            $out(strtoupper($finding['severity']) . ': ' . $finding['title'] . ' (' . $finding['count'] . ')');
+            $out('');
+
+            foreach (str_split(wordwrap($finding['explanation'], 70, "\n", true), 10_000) as $line) {
+                $out('  ' . str_replace("\n", "\n  ", $line));
+            }
+
+            $out('');
+            $out('  What to do:');
+            $out('  ' . str_replace("\n", "\n  ", wordwrap($finding['action'], 70, "\n", true)));
+
+            if ($finding['rows'] === []) {
+                continue;
+            }
+
+            $out('');
+
+            $columns = array_keys($finding['rows'][0]);
+            $out('  ' . implode(' | ', $columns));
+
+            foreach ($finding['rows'] as $row) {
+                $out('  ' . implode(' | ', array_map(
+                    static fn ($value): string => (string) ($value ?? ''),
+                    $row
+                )));
+            }
+
+            if ($finding['count'] > count($finding['rows'])) {
+                $out('  ... and ' . ($finding['count'] - count($finding['rows'])) . ' more.');
+            }
+        }
+
+        $out('');
+        $out(str_repeat('-', 72));
+        $out('This command changed nothing. Work through the findings above by hand.');
+        break;
+
     case 'help':
     default:
         $out('Available commands:');
@@ -517,6 +589,7 @@ switch ($command) {
             'db:check'         => 'Verify core tables exist',
             'mail:check'       => 'Verify provider credentials and quota; add an address to check if SES will deliver to it',
             'mail:stats'       => 'Count sent, arrived, bounced and failed email over the last N days (default 30)',
+            'send:doctor'      => 'Read-only report on sends that cannot be accounted for, and how to reconcile them',
             'key:generate'     => 'Generate APP_KEY into .env',
             'schema:sql'       => 'Print schema DDL for a driver',
             'route:list'       => 'List registered routes',

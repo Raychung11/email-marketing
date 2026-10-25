@@ -9,6 +9,7 @@ use App\Database\Migrator;
 use App\Database\Schema\Schema;
 use App\Support\TenantContext;
 use Redis;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -71,6 +72,10 @@ final class Application
         Env::set('DB_DRIVER', 'sqlite');
         Env::set('DB_SQLITE_PATH', ':memory:');
         Env::set('QUEUE_DRIVER', 'sync');
+        // The database store, not the array one: the suite should exercise the
+        // limiter production actually runs, and an in-memory database gives each
+        // test its own counters anyway.
+        Env::set('RATE_LIMIT_STORE', 'database');
         Env::set('MAIL_PROVIDER', 'log');
         Env::set('AI_PROVIDER', 'null');
         Env::set('APP_URL', 'http://localhost');
@@ -167,32 +172,70 @@ final class Application
             return new Encrypter((string) $c->make(Config::class)->get('app.key', ''));
         });
 
+        /*
+         * Where rate-limit counters live.
+         *
+         * Chosen from its own setting, never from the queue driver. Those are
+         * unrelated decisions, and inferring one from the other is what left a
+         * database-queue deployment counting login attempts in memory — which
+         * on shared hosting, where every request is a fresh process, means not
+         * counting them at all.
+         *
+         * In production the in-process store is not a fallback. If neither
+         * Redis nor the database can hold a counter, this throws: an
+         * unthrottled login page that looks healthy is worse than one that
+         * announces it is broken, and the readiness check reports it before a
+         * user ever gets there.
+         */
         $c->singleton(RateLimitStore::class, static function (Container $c): RateLimitStore {
-            $driver = (string) $c->make(Config::class)->get('queue.driver', 'redis');
+            $config    = $c->make(Config::class);
+            $preferred = (string) $config->get('security.rate_limit.store', 'auto');
+            $env       = (string) $config->get('app.env', 'production');
 
-            if ($driver === 'redis' && extension_loaded('redis')) {
-                try {
-                    $redisConfig = $c->make(Config::class)->get('queue.redis', []);
-                    $redis       = new Redis();
-                    $redis->connect(
-                        (string) ($redisConfig['host'] ?? '127.0.0.1'),
-                        (int) ($redisConfig['port'] ?? 6379),
-                        1.5
+            if ($preferred === 'array') {
+                if ($env === 'production') {
+                    $c->make(Logger::class)->error(
+                        'RATE_LIMIT_STORE=array in production: login and API throttling '
+                        . 'will not survive a single request. Set it to redis or database.'
                     );
+                }
 
-                    if (($redisConfig['password'] ?? '') !== '') {
-                        $redis->auth((string) $redisConfig['password']);
-                    }
+                return new ArrayRateLimitStore($c->make(Clock::class));
+            }
 
+            if ($preferred === 'auto' || $preferred === 'redis') {
+                $redis = self::connectRedis($config, 1.5);
+
+                if ($redis !== null) {
                     return new RedisRateLimitStore($redis);
-                } catch (Throwable) {
-                    // Fall through: a missing Redis must not take the app down,
-                    // but the in-process limiter is per-worker only, so this is
-                    // logged loudly by the health check.
+                }
+
+                if ($preferred === 'redis') {
+                    throw new RuntimeException(
+                        'RATE_LIMIT_STORE=redis but Redis could not be reached. '
+                        . 'Start Redis, or set RATE_LIMIT_STORE=database.'
+                    );
                 }
             }
 
-            return new ArrayRateLimitStore($c->make(Clock::class));
+            $connection = $c->make(Connection::class);
+
+            try {
+                $connection->scalar('SELECT COUNT(*) FROM rate_limits WHERE expires_at > ?', ['1970-01-01 00:00:00']);
+
+                return new DatabaseRateLimitStore($connection, $c->make(Clock::class));
+            } catch (Throwable $e) {
+                if ($env === 'production') {
+                    throw new RuntimeException(
+                        'No usable rate-limit store: Redis is unreachable and the rate_limits '
+                        . 'table is missing. Run `php cron/console.php migrate`. (' . $e->getMessage() . ')',
+                        0,
+                        $e
+                    );
+                }
+
+                return new ArrayRateLimitStore($c->make(Clock::class));
+            }
         });
 
         $c->singleton(RateLimiter::class, static fn (Container $c): RateLimiter
@@ -347,22 +390,12 @@ final class Application
                 return new \App\Queue\SyncQueueDriver();
             }
 
-            if ($driver === 'redis' && extension_loaded('redis')) {
-                try {
+            if ($driver === 'redis') {
+                $redis = self::connectRedis($config, 2.0);
+
+                if ($redis !== null) {
                     /** @var array<string,mixed> $redisConfig */
                     $redisConfig = $config->get('queue.redis', []);
-                    $redis       = new Redis();
-                    $redis->connect(
-                        (string) ($redisConfig['host'] ?? '127.0.0.1'),
-                        (int) ($redisConfig['port'] ?? 6379),
-                        2.0
-                    );
-
-                    if ((string) ($redisConfig['password'] ?? '') !== '') {
-                        $redis->auth((string) $redisConfig['password']);
-                    }
-
-                    $redis->select((int) ($redisConfig['database'] ?? 0));
 
                     return new \App\Queue\RedisQueueDriver(
                         $redis,
@@ -370,12 +403,11 @@ final class Application
                         $c->make(Clock::class),
                         (string) ($redisConfig['prefix'] ?? 'aigh:queue:')
                     );
-                } catch (Throwable $e) {
-                    $c->make(Logger::class)->error(
-                        'Redis is unavailable; falling back to the database queue driver.',
-                        ['error' => $e->getMessage()]
-                    );
                 }
+
+                $c->make(Logger::class)->error(
+                    'Redis is unavailable; falling back to the database queue driver.'
+                );
             }
 
             return new \App\Queue\DatabaseQueueDriver($c->make(Connection::class), $c->make(Clock::class));
@@ -456,5 +488,40 @@ final class Application
         $request = Request::capture();
 
         $this->handle($request)->send();
+    }
+
+    /**
+     * A connected Redis handle, or null.
+     *
+     * One place, so the queue driver and the rate limiter cannot end up
+     * disagreeing about whether Redis is available or how to reach it.
+     */
+    private static function connectRedis(Config $config, float $timeout): ?Redis
+    {
+        if (!extension_loaded('redis')) {
+            return null;
+        }
+
+        /** @var array<string,mixed> $settings */
+        $settings = $config->get('queue.redis', []);
+
+        try {
+            $redis = new Redis();
+            $redis->connect(
+                (string) ($settings['host'] ?? '127.0.0.1'),
+                (int) ($settings['port'] ?? 6379),
+                $timeout
+            );
+
+            if ((string) ($settings['password'] ?? '') !== '') {
+                $redis->auth((string) $settings['password']);
+            }
+
+            $redis->select((int) ($settings['database'] ?? 0));
+
+            return $redis;
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

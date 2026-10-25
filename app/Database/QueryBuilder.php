@@ -458,6 +458,17 @@ final class QueryBuilder
 
         foreach ($values as $column => $value) {
             $this->assertIdentifier($column);
+
+            // An Expression is written into the statement rather than bound, so
+            // that `attempt_count = attempt_count + 1` stays a single atomic
+            // UPDATE. It validates its own SQL on construction; nothing
+            // user-supplied can become one.
+            if ($value instanceof Expression) {
+                $assignments[] = $this->wrap($column) . ' = ' . $value->sql;
+
+                continue;
+            }
+
             $assignments[] = $this->wrap($column) . ' = ?';
             $bindings[]    = $value;
         }

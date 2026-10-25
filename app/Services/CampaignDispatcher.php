@@ -48,7 +48,7 @@ use Throwable;
  *
  *  3. ENQUEUEING HAPPENS BEFORE THE ROW IS MARKED QUEUED. If this process dies
  *     between the two, the recipient is picked up again next tick and a second
- *     job is enqueued — and `claimForSending()` makes the second job a no-op.
+ *     job is enqueued — and `claim()` makes the second job a no-op.
  *     The opposite order would lose the recipient silently, and a duplicate job
  *     that sends nothing is a far better failure than a customer who was
  *     promised an email and never got one.
@@ -70,6 +70,7 @@ final class CampaignDispatcher
         private readonly Clock $clock,
         private readonly Logger $logger,
         private readonly AuditService $audit,
+        private readonly SendBudget $budget,
     ) {
     }
 
@@ -124,17 +125,38 @@ final class CampaignDispatcher
             $this->tenant->bind($organisationId, null, $organisation);
 
             try {
-                $budget = $this->budgetFor($organisation);
+                // Housekeeping first, and in this order. Reclaiming puts work
+                // that nobody is doing back where it can be found; re-keying
+                // yesterday's holds frees allowance that belongs to today; and
+                // only once both are done is it safe to rebuild the counter the
+                // reservations are about to be taken from.
+                $reclaimed = $this->recipients->reclaimExpiredClaims();
+
+                if ($reclaimed['released'] > 0 || $reclaimed['parked'] > 0) {
+                    $this->logger->warning('Reclaimed abandoned send claims', [
+                        'organisation' => $organisationId,
+                        'released'     => $reclaimed['released'],
+                        'parked'       => $reclaimed['parked'],
+                    ]);
+                }
+
+                $allowance = $this->allowanceFor($organisation);
+
+                $this->budget->carryOverHolds($organisationId, $allowance->dayKey);
+                $this->budget->reconcile($organisationId, $allowance->dayKey);
 
                 foreach ($campaignIds as $campaignId) {
-                    $outcome = $this->run($campaignId, $budget);
+                    $outcome = $this->run($campaignId, $allowance);
 
                     $summary['activated'] += $outcome['activated'];
                     $summary['queued']    += $outcome['queued'];
                     $summary['completed'] += $outcome['completed'];
                     $summary['skipped']   += $outcome['skipped'];
 
-                    $budget -= $outcome['queued'];
+                    // Only the per-tick cap is spent here. The daily allowance
+                    // lives in the reservation counter, which every campaign in
+                    // this loop is already drawing from.
+                    $allowance = $allowance->minus($outcome['queued']);
                 }
             } catch (Throwable $e) {
                 $this->logger->error('Campaign dispatch failed for organisation', [
@@ -156,7 +178,7 @@ final class CampaignDispatcher
      *
      * @return array{activated:int,queued:int,completed:int,skipped:int}
      */
-    public function run(int $campaignId, int $budget): array
+    public function run(int $campaignId, SendAllowance $allowance): array
     {
         $outcome = ['activated' => 0, 'queued' => 0, 'completed' => 0, 'skipped' => 0];
 
@@ -222,7 +244,7 @@ final class CampaignDispatcher
             ]);
         }
 
-        $outcome['queued'] = $this->dispatchPending($campaignId, $budget);
+        $outcome['queued'] = $this->dispatchPending($campaignId, $allowance);
 
         if ($this->finalise($campaignId)) {
             $outcome['completed'] = 1;
@@ -330,23 +352,28 @@ final class CampaignDispatcher
     // ------------------------------------------------------------- dispatch
 
     /**
-     * Enqueue up to $budget sends for a campaign.
+     * Enqueue what this tick is allowed to enqueue for a campaign.
      *
-     * Streams the snapshot with keyset pagination; a 100k audience never lands in
-     * PHP memory, and what is left unqueued this tick is simply picked up by the
-     * next one.
+     * Streams the snapshot with keyset pagination; a 100k audience never lands
+     * in PHP memory, and what is left unqueued this tick is simply picked up by
+     * the next one.
+     *
+     * Every recipient enqueued holds one unit of the tenant's daily allowance,
+     * reserved before the job goes on the queue. A recipient already carrying
+     * today's key is a retry and is not charged twice — the allowance belongs to
+     * the send, not to the attempt.
      */
-    public function dispatchPending(int $campaignId, int $budget): int
+    public function dispatchPending(int $campaignId, SendAllowance $allowance): int
     {
-        if ($budget <= 0) {
+        if ($allowance->exhausted()) {
             return 0;
         }
 
-        // The sync driver runs jobs inline. That is fine in a test, and it is the
-        // single worst thing this application could do in production: an HTTP
-        // request or a cron tick would send the entire campaign in-process, time
-        // out somewhere in the middle, and leave nobody able to say which half
-        // went. Refuse rather than half-send.
+        // The sync driver runs jobs inline. That is fine in a test, and it is
+        // the single worst thing this application could do in production: an
+        // HTTP request or a cron tick would send the entire campaign in-process,
+        // time out somewhere in the middle, and leave nobody able to say which
+        // half went. Refuse rather than half-send.
         if ($this->queue->driver() instanceof SyncQueueDriver
             && (string) $this->config->get('app.env', 'production') !== 'testing'
         ) {
@@ -362,19 +389,45 @@ final class CampaignDispatcher
         $organisationId = $this->tenant->organisationId();
         $queueName      = (string) $this->config->get('queue.campaign_queue', 'email_marketing');
         $queued         = 0;
+        $credits        = 0;
+        $spent          = false;
 
         foreach ($this->recipients->pendingBatches($campaignId, 500) as $batch) {
             $dispatched = [];
 
             foreach ($batch as $row) {
-                if ($queued >= $budget) {
+                if ($queued >= $allowance->tickCap) {
                     break;
+                }
+
+                // A row that already carries today's key paid for itself when it
+                // was first enqueued; this is a retry of that same send.
+                $needsCredit = (string) ($row['budget_day'] ?? '') !== $allowance->dayKey;
+
+                if ($needsCredit) {
+                    if ($credits === 0) {
+                        $credits = $this->budget->reserve(
+                            $organisationId,
+                            $allowance->dayKey,
+                            $allowance->dailyLimit,
+                            min(100, $allowance->tickCap - $queued)
+                        );
+                    }
+
+                    if ($credits === 0) {
+                        $spent = true;
+
+                        break;
+                    }
+
+                    $credits--;
                 }
 
                 $recipientId = (int) $row['id'];
 
-                // Enqueue first, mark second — see the class docblock. A duplicate
-                // job is harmless; a lost recipient is not.
+                // Enqueue first, mark second — see the class docblock. A
+                // duplicate job is harmless because the claim is atomic; a lost
+                // recipient is not.
                 $this->queue->dispatch(
                     $queueName,
                     SendCampaignEmail::class,
@@ -391,19 +444,34 @@ final class CampaignDispatcher
             }
 
             if ($dispatched !== []) {
-                $this->recipients->markQueued($dispatched);
+                $this->recipients->markQueued($dispatched, $allowance->dayKey);
             }
 
-            if ($queued >= $budget) {
+            if ($spent || $queued >= $allowance->tickCap) {
                 break;
             }
+        }
+
+        // Anything reserved and not handed to a recipient goes straight back.
+        // The next tick would reconcile it away regardless, but a tenant whose
+        // allowance is briefly wrong is a support ticket either way.
+        if ($credits > 0) {
+            $this->budget->release($organisationId, $allowance->dayKey, $credits);
+        }
+
+        if ($spent) {
+            $this->logger->info('Daily send allowance reached; the rest waits for tomorrow', [
+                'campaign'     => $campaignId,
+                'organisation' => $organisationId,
+                'day'          => $allowance->dayKey,
+            ]);
         }
 
         if ($queued > 0) {
             $this->logger->info('Campaign sends enqueued', [
                 'campaign' => $campaignId,
                 'queued'   => $queued,
-                'budget'   => $budget,
+                'tick_cap' => $allowance->tickCap,
             ]);
         }
 
@@ -413,12 +481,25 @@ final class CampaignDispatcher
     /**
      * Close a campaign whose snapshot has been fully worked through.
      *
-     * "Worked through" counts queued recipients as outstanding, so a campaign is
-     * never reported complete while jobs are still sitting on the queue.
+     * "Worked through" counts queued, in-flight and unaccounted-for recipients
+     * as outstanding. A campaign is never reported complete while jobs are still
+     * on the queue, while a worker is mid-provider-call, or while a row nobody
+     * can explain is sitting there — a completion badge is a claim about what
+     * happened, and none of those three states supports one.
      */
     public function finalise(int $campaignId): bool
     {
         if ($this->recipients->remaining($campaignId) > 0) {
+            $unreconciled = $this->recipients->unreconciled($campaignId);
+
+            if ($unreconciled > 0) {
+                $this->logger->warning(
+                    'Campaign is held open: some sends could not be accounted for. '
+                    . 'Run `php cron/console.php send:doctor` and reconcile them.',
+                    ['campaign' => $campaignId, 'outcome_unknown' => $unreconciled]
+                );
+            }
+
             return false;
         }
 
@@ -442,12 +523,14 @@ final class CampaignDispatcher
     // -------------------------------------------------------------- budget
 
     /**
-     * How many sends this organisation may enqueue in this tick.
+     * What this organisation may enqueue right now.
      *
-     * Two independent ceilings, and the lower one wins:
+     * Two independent ceilings, and they do different jobs:
      *
      *  - the tenant's own daily limit, as a calendar day in their timezone,
-     *    because that is what their plan says and what they see in the UI;
+     *    because that is what their plan says and what they see in the UI. It is
+     *    enforced through the reservation counter, so queued-but-unsent work
+     *    counts against it;
      *  - the provider's live quota, read from the provider rather than guessed
      *    from config, because exceeding an SES rate limit produces throttling
      *    errors that look like bounces and damage the whole platform's
@@ -455,26 +538,39 @@ final class CampaignDispatcher
      *
      * @param array<string,mixed> $organisation
      */
-    public function budgetFor(array $organisation): int
+    public function allowanceFor(array $organisation): SendAllowance
     {
-        $budget = PHP_INT_MAX;
+        $organisationId = (int) $organisation['id'];
+        $timezone       = (string) ($organisation['timezone'] ?? 'UTC');
+        $dayKey         = $this->budget->dayKey($timezone);
 
         $dailyLimit = (int) ($organisation['daily_send_limit'] ?? 0);
 
         if ($dailyLimit > 0) {
-            $sentToday = $this->messages->sentToday(
-                (string) ($organisation['timezone'] ?? 'UTC')
+            // Marketing that never had a recipient row to reserve against still
+            // spends the same allowance.
+            $dailyLimit = max(
+                0,
+                $dailyLimit - $this->budget->consumedOutsideCampaigns($organisationId, $timezone)
             );
-
-            $budget = max(0, $dailyLimit - $sentToday);
+        } else {
+            // No tenant limit configured. The counter still tracks, so the
+            // numbers stay reconcilable, but it never refuses.
+            $dailyLimit = PHP_INT_MAX;
         }
 
+        return new SendAllowance($this->tickCap(), $dailyLimit, $dayKey);
+    }
+
+    /** How many jobs it is sensible to put on the queue in one scheduler tick. */
+    private function tickCap(): int
+    {
         if (!(bool) $this->config->get('mail.throttle.respect_provider_quota', true)) {
-            return $this->capped($budget);
+            return $this->capped(PHP_INT_MAX);
         }
 
-        $quota = $this->quota();
         $window = max(1, (int) $this->config->get('mail.throttle.dispatch_window_seconds', 60));
+        $quota  = $this->quota();
 
         if ($quota === null) {
             // No live quota (a provider that does not report one, or a transient
@@ -482,16 +578,16 @@ final class CampaignDispatcher
             // unlimited — guessing high here is the expensive direction.
             $perSecond = max(1, (int) $this->config->get('mail.throttle.default_per_second', 14));
 
-            return $this->capped(min($budget, $perSecond * $window));
+            return $this->capped($perSecond * $window);
         }
 
-        $budget = min($budget, (int) floor($quota->remaining()));
+        $cap = (int) floor($quota->remaining());
 
         if ($quota->maxSendRate > 0) {
-            $budget = min($budget, (int) floor($quota->maxSendRate * $window));
+            $cap = min($cap, (int) floor($quota->maxSendRate * $window));
         }
 
-        return $this->capped($budget);
+        return $this->capped($cap);
     }
 
     private function quota(): ?SendQuota
